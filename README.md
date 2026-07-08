@@ -1,6 +1,6 @@
 # NexusMind 多智能体客服中枢
 
-NexusMind 是一个面向企业实训演示的多智能体客服系统，技术栈为 Java 21、Spring Boot、Spring MVC、MyBatis-Plus、PostgreSQL、Vue 3、WebSocket 和 Qwen 模型适配。
+NexusMind 是一个面向企业实训演示的多智能体客服系统，技术栈为 Java 21、Spring Boot、Spring AI、Spring MVC、MyBatis-Plus、PostgreSQL、Vue 3、WebSocket 和 Qwen 模型适配。
 
 ## 功能
 
@@ -56,8 +56,9 @@ docker compose up --build
 
 ```properties
 DASHSCOPE_API_KEY=你的百炼或DashScope Key
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode
 QWEN_MODEL=qwen3.7-plus
 JWT_SECRET=请替换为更长的随机密钥
 ```
 
-当前 `DashScopeClient` 使用阿里云百炼/DashScope OpenAI 兼容接口调用模型，并保留 DashScope Java SDK 依赖。配置 `DASHSCOPE_API_KEY` 后会调用数据库中启用的模型，默认是 `qwen3.7-plus`；未配置 API Key 时会返回本地演示回复，保证系统闭环可运行。
+当前模型调用层使用 Spring AI `ChatClient`，通过阿里云百炼/DashScope OpenAI 兼容接口调用 Qwen。配置 `DASHSCOPE_API_KEY` 后会调用数据库中启用的模型，默认是 `qwen3.7-plus`；未配置 API Key 时会走本地演示网关，保证系统闭环可运行。

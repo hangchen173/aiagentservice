@@ -18,17 +18,17 @@ import java.util.List;
 public class AiModelService {
     private final AiModelMapper aiModelMapper;
     private final ModelCallLogMapper modelCallLogMapper;
-    private final DashScopeClient dashScopeClient;
+    private final AiChatGateway aiChatGateway;
     private final String defaultModel;
 
     public AiModelService(
             AiModelMapper aiModelMapper,
             ModelCallLogMapper modelCallLogMapper,
-            DashScopeClient dashScopeClient,
+            AiChatGateway aiChatGateway,
             @Value("${nexusmind.ai.default-model}") String defaultModel) {
         this.aiModelMapper = aiModelMapper;
         this.modelCallLogMapper = modelCallLogMapper;
-        this.dashScopeClient = dashScopeClient;
+        this.aiChatGateway = aiChatGateway;
         this.defaultModel = defaultModel;
     }
 
@@ -50,7 +50,8 @@ public class AiModelService {
 
     public String complete(Long sessionId, AiAgent agent, String userMessage) {
         AiModel model = activeModel();
-        String prompt = agent.getPrompt() + "\n\n用户问题：" + userMessage;
+        String systemPrompt = agent.getPrompt();
+        String prompt = systemPrompt + "\n\n用户问题：" + userMessage;
         Instant startedAt = Instant.now();
         ModelCallLog log = new ModelCallLog();
         log.setSessionId(sessionId);
@@ -59,7 +60,7 @@ public class AiModelService {
         log.setPromptPreview(preview(prompt));
 
         try {
-            String response = dashScopeClient.complete(model, prompt);
+            String response = aiChatGateway.complete(model, systemPrompt, userMessage);
             log.setStatus("SUCCESS");
             log.setResponsePreview(preview(response));
             log.setLatencyMs(Duration.between(startedAt, Instant.now()).toMillis());
