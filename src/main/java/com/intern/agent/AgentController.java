@@ -2,6 +2,7 @@ package com.intern.agent;
 
 import com.intern.common.ApiResponse;
 import com.intern.model.entity.AiAgent;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,11 @@ public class AgentController {
     @PostMapping
     public ApiResponse<AiAgent> create(@RequestBody AiAgent agent) {
         return ApiResponse.ok(agentService.create(agent));
+    }
+
+    @PostMapping("/route-preview")
+    public ApiResponse<RoutePreviewResponse> routePreview(@Valid @RequestBody RoutePreviewRequest request) {
+        return ApiResponse.ok(RoutePreviewResponse.from(agentService.decideRoute(request.content())));
     }
 
     @PutMapping("/{id}")

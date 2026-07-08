@@ -73,6 +73,28 @@
               <p>启停不同业务场景下的客服智能体</p>
             </div>
           </div>
+          <div class="route-preview">
+            <el-input v-model="routePreviewText" placeholder="输入一段访客消息，预览会命中的智能体" @keyup.enter="previewRoute" />
+            <el-button type="primary" :loading="routePreviewLoading" @click="previewRoute">预览</el-button>
+          </div>
+          <div v-if="routePreview" class="preview-result">
+            <div>
+              <span>命中智能体</span>
+              <strong>{{ routePreview.agentName }}</strong>
+            </div>
+            <div>
+              <span>业务场景</span>
+              <strong>{{ routePreview.scenario }}</strong>
+            </div>
+            <div>
+              <span>关键词</span>
+              <strong>{{ routePreview.matchedKeyword || '兜底' }}</strong>
+            </div>
+            <div>
+              <span>转人工</span>
+              <strong>{{ routePreview.handoffRecommended ? '建议' : '否' }}</strong>
+            </div>
+          </div>
           <el-table :data="agents" height="480" empty-text="暂无智能体">
             <el-table-column prop="name" label="名称" width="180" />
             <el-table-column prop="scenario" label="场景" width="220" />
@@ -184,6 +206,16 @@ interface ModelCallLog {
   errorMessage: string
 }
 
+interface RoutePreview {
+  agentId: number
+  agentCode: string
+  agentName: string
+  scenario: string
+  matchedKeyword: string | null
+  fallback: boolean
+  handoffRecommended: boolean
+}
+
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
@@ -193,6 +225,9 @@ const tickets = ref<Ticket[]>([])
 const agents = ref<AiAgent[]>([])
 const models = ref<AiModel[]>([])
 const logs = ref<ModelCallLog[]>([])
+const routePreviewText = ref('')
+const routePreview = ref<RoutePreview | null>(null)
+const routePreviewLoading = ref(false)
 const loading = ref(false)
 const activeTab = computed(() => String(route.params.tab || 'chat'))
 const isAdmin = computed(() => auth.user?.role === 'ADMIN')
@@ -282,6 +317,22 @@ async function saveModel(row: AiModel) {
   }
 }
 
+async function previewRoute() {
+  const content = routePreviewText.value.trim()
+  if (!content) {
+    ElMessage.warning('请输入要预览的访客消息')
+    return
+  }
+  routePreviewLoading.value = true
+  try {
+    routePreview.value = await api<RoutePreview>(http.post('/agents/route-preview', { content }))
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '预览失败')
+  } finally {
+    routePreviewLoading.value = false
+  }
+}
+
 function selectTab(tab: string) {
   router.push(`/console/${tab}`)
 }
@@ -325,5 +376,45 @@ function labelOfSender(type: string) {
   margin: 6px 0 0;
   color: #667085;
   font-size: 13px;
+}
+
+.route-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.preview-result {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.preview-result div {
+  border: 1px solid #dce2ea;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+}
+
+.preview-result span {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.preview-result strong {
+  color: #16324f;
+  font-size: 14px;
+}
+
+@media (max-width: 800px) {
+  .route-preview,
+  .preview-result {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

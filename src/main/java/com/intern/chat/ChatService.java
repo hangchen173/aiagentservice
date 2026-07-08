@@ -2,6 +2,7 @@ package com.intern.chat;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.intern.agent.AgentService;
+import com.intern.agent.AgentRouteDecision;
 import com.intern.aimodel.AiModelService;
 import com.intern.common.BusinessException;
 import com.intern.mapper.ChatMessageMapper;
@@ -76,7 +77,8 @@ public class ChatService {
         ChatMessage userMessage = saveMessage(sessionId, "VISITOR", session.getVisitorId(), content);
         wsPublisher.publish(sessionId, "CHAT_MESSAGE", content);
 
-        AiAgent routedAgent = agentService.route(content);
+        AgentRouteDecision routeDecision = agentService.decideRoute(content);
+        AiAgent routedAgent = routeDecision.agent();
         session.setCurrentAiAgentCode(routedAgent.getCode());
         chatSessionMapper.updateById(session);
 
@@ -85,7 +87,7 @@ public class ChatService {
         ChatMessage aiMessage = saveMessage(sessionId, "AI", null, reply);
         wsPublisher.publish(sessionId, "AI_MESSAGE", reply);
 
-        if (agentService.shouldHandoff(content)) {
+        if (routeDecision.handoffRecommended()) {
             Ticket ticket = ticketService.createFromHandoff(sessionId, session.getVisitorId(), routedAgent.getCode(), content);
             session.setStatus("PENDING_HANDOFF");
             chatSessionMapper.updateById(session);
