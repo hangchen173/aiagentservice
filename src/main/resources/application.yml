@@ -1,0 +1,44 @@
+server:
+  port: 8080
+
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  application:
+    name: intern
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/intern_db}
+    username: ${SPRING_DATASOURCE_USERNAME:intern_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:intern_pass}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.postgresql.Driver}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      data-locations: classpath:data.sql
+      continue-on-error: true
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.intern.model
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: true
+      logic-not-delete-value: false
+
+nexusmind:
+  jwt:
+    secret: ${JWT_SECRET:nexusmind-local-secret-change-me}
+    ttl-seconds: ${JWT_TTL_SECONDS:86400}
+  ai:
+    dashscope-api-key: ${DASHSCOPE_API_KEY:}
+    default-model: ${QWEN_MODEL:qwen3.7-plus}
