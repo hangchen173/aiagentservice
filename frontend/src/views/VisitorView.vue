@@ -14,12 +14,12 @@
             <strong>{{ labelOf(message.senderType) }}</strong>
             <div>{{ message.content }}</div>
           </div>
-          <div v-if="typing" class="message ai">AI 正在回复...</div>
+          <div v-if="typing" class="message ai">{{ longWait ? 'AI 仍在整理回复，请稍候' : 'AI 正在回复...' }}</div>
         </div>
         <div class="composer">
-          <el-input v-model="draft" placeholder="请输入你的问题" @keyup.enter="send" />
-          <el-button type="primary" :loading="sending" @click="send">发送</el-button>
-          <el-button :disabled="sending || !session" @click="handoff">转人工</el-button>
+          <el-input v-model="draft" :disabled="sending" placeholder="请输入你的问题" @keyup.enter="send" />
+          <el-button type="primary" :loading="sending" :disabled="!draft.trim() || !session" @click="send">发送</el-button>
+          <el-button :loading="handoffSending" :disabled="sending || handoffSending || !session" @click="handoff">转人工</el-button>
         </div>
       </section>
     </main>
@@ -52,8 +52,11 @@ const messageList = ref<HTMLElement | null>(null)
 const draft = ref('')
 const typing = ref(false)
 const sending = ref(false)
+const handoffSending = ref(false)
+const longWait = ref(false)
 const canOpenConsole = computed(() => auth.hasAnyRole(['ADMIN', 'AGENT']))
 let socket: WebSocket | null = null
+let longWaitTimer: number | undefined
 
 onMounted(async () => {
   try {
@@ -67,62 +70,70 @@ onMounted(async () => {
   }
 })
 
-onBeforeUnmount(() => socket?.close())
+onBeforeUnmount(() => {
+  window.clearTimeout(longWaitTimer)
+  socket?.close()
+})
 
 function connect() {
   const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  socket = new WebSocket(`${scheme}://${window.location.host}/ws/chat`)
+  socket = new WebSocket(`${scheme}://${window.location.host}/ws/chat?token=${encodeURIComponent(auth.token || '')}`)
   socket.onopen = () => socket?.send(JSON.stringify({ type: 'JOIN_SESSION', sessionId: session.value?.id }))
   socket.onmessage = (event) => {
     const payload = JSON.parse(event.data)
     if (payload.type === 'AI_MESSAGE') {
-      typing.value = false
+      finishWaiting()
       addMessage({ senderType: 'AI', content: payload.content })
     }
     if (payload.type === 'SYSTEM_NOTICE' || payload.type === 'TICKET_CREATED') {
       addMessage({ senderType: 'SYSTEM', content: payload.content })
     }
+    if (payload.type === 'ERROR') {
+      finishWaiting()
+      ElMessage.error(payload.content || '实时消息处理失败')
+    }
   }
   socket.onerror = () => {
-    typing.value = false
+    finishWaiting()
     ElMessage.warning('实时连接异常，将使用普通请求发送消息')
   }
+  socket.onclose = () => finishWaiting()
 }
 
 async function send() {
-  if (!draft.value.trim() || !session.value) return
+  if (sending.value || !draft.value.trim() || !session.value) return
   const content = draft.value.trim()
   draft.value = ''
-  sending.value = true
-  typing.value = true
+  startWaiting()
   addMessage({ senderType: 'VISITOR', content })
   try {
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'CHAT_MESSAGE', sessionId: session.value.id, content }))
     } else {
       const response = await api<ChatMessage>(http.post(`/chat/sessions/${session.value.id}/messages`, { content }))
-      typing.value = false
+      finishWaiting()
       addMessage(response)
     }
   } catch (error) {
-    typing.value = false
+    finishWaiting()
     ElMessage.error(error instanceof Error ? error.message : '发送失败')
-  } finally {
-    sending.value = false
   }
 }
 
 async function handoff() {
-  if (!session.value) return
-  if (socket?.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ type: 'HANDOFF_REQUEST', sessionId: session.value.id, content: '访客主动请求转人工' }))
-    return
-  }
+  if (handoffSending.value || sending.value || !session.value) return
+  handoffSending.value = true
   try {
-    await api(http.post(`/chat/sessions/${session.value.id}/handoff`, { content: '访客主动请求转人工' }))
-    addMessage({ senderType: 'SYSTEM', content: '已提交转人工请求，请等待客服处理' })
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'HANDOFF_REQUEST', sessionId: session.value.id, content: '访客主动请求转人工' }))
+    } else {
+      await api(http.post(`/chat/sessions/${session.value.id}/handoff`, { content: '访客主动请求转人工' }))
+      addMessage({ senderType: 'SYSTEM', content: '已提交转人工请求，请等待客服处理' })
+    }
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '转人工失败')
+  } finally {
+    handoffSending.value = false
   }
 }
 
@@ -141,6 +152,23 @@ function addMessage(message: ChatMessage) {
       messageList.value.scrollTop = messageList.value.scrollHeight
     }
   })
+}
+
+function startWaiting() {
+  sending.value = true
+  typing.value = true
+  longWait.value = false
+  window.clearTimeout(longWaitTimer)
+  longWaitTimer = window.setTimeout(() => {
+    longWait.value = true
+  }, 8000)
+}
+
+function finishWaiting() {
+  sending.value = false
+  typing.value = false
+  longWait.value = false
+  window.clearTimeout(longWaitTimer)
 }
 </script>
 

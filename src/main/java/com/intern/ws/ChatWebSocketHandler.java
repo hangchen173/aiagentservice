@@ -2,6 +2,7 @@ package com.intern.ws;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intern.chat.ChatService;
+import com.intern.security.AuthUser;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -22,24 +23,38 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        AuthUser user = (AuthUser) session.getAttributes().get(WsAuthHandshakeInterceptor.AUTH_USER_ATTRIBUTE);
+        if (user == null) {
+            session.close(CloseStatus.NOT_ACCEPTABLE.withReason("请先登录"));
+            return;
+        }
         WsMessage wsMessage = objectMapper.readValue(message.getPayload(), WsMessage.class);
+        if (wsMessage.getSessionId() == null) {
+            sendError(session, null, "缺少会话 ID");
+            return;
+        }
         if ("JOIN_SESSION".equals(wsMessage.getType())) {
+            chatService.requireAccessibleSession(wsMessage.getSessionId(), user);
             registry.join(wsMessage.getSessionId(), session);
-            registry.broadcast(wsMessage.getSessionId(), objectMapper.writeValueAsString(
-                    new WsMessage("SYSTEM_NOTICE", wsMessage.getSessionId(), "已接入实时会话")));
+            session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
+                    new WsMessage("SESSION_JOINED", wsMessage.getSessionId(), "已接入实时会话"))));
             return;
         }
         if ("CHAT_MESSAGE".equals(wsMessage.getType())) {
-            chatService.handleVisitorMessage(wsMessage.getSessionId(), wsMessage.getContent());
+            chatService.handleVisitorMessage(wsMessage.getSessionId(), wsMessage.getContent(), user);
             return;
         }
         if ("HANDOFF_REQUEST".equals(wsMessage.getType())) {
-            chatService.handoff(wsMessage.getSessionId(), wsMessage.getContent());
+            chatService.handoff(wsMessage.getSessionId(), wsMessage.getContent(), user);
         }
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         registry.remove(session);
+    }
+
+    private void sendError(WebSocketSession session, Long sessionId, String content) throws Exception {
+        session.sendMessage(new TextMessage(objectMapper.writeValueAsString(new WsMessage("ERROR", sessionId, content))));
     }
 }

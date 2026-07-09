@@ -412,6 +412,41 @@ function labelOfSender(type: string) {
 }
 
 @media (max-width: 800px) {
+  .topbar {
+    height: auto;
+    min-height: 60px;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .sidebar {
+    padding: 8px 12px;
+  }
+
+  .sidebar :deep(.el-menu) {
+    display: flex;
+    overflow-x: auto;
+    border-right: 0;
+  }
+
+  .sidebar :deep(.el-menu-item) {
+    flex: 0 0 auto;
+  }
+
+  .main {
+    padding: 12px;
+  }
+
+  .panel {
+    overflow-x: auto;
+  }
+
+  .panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .route-preview,
   .preview-result {
     grid-template-columns: 1fr;

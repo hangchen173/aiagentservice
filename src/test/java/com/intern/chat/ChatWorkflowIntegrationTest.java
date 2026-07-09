@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -162,6 +163,73 @@ class ChatWorkflowIntegrationTest {
         List<Ticket> tickets = ticketMapper.selectList(null);
         assertThat(tickets).hasSize(1);
         assertThat(tickets.get(0).getDescription()).isEqualTo("访客主动请求转人工");
+    }
+
+    @Test
+    void visitorOnlyListsOwnSessions() throws Exception {
+        String visitorToken = fixture.login("visitor", "visitor123");
+        long ownSessionId = fixture.createSession(visitorToken);
+        jdbcTemplate.update("""
+                insert into sys_users (username, password, display_name, role, online, created_at, updated_at, deleted)
+                values ('visitor2', '{noop}visitor123', '第二访客', 'VISITOR', false, current_timestamp, current_timestamp, false)
+                """);
+        String otherVisitorToken = fixture.login("visitor2", "visitor123");
+        fixture.createSession(otherVisitorToken);
+
+        mockMvc.perform(get("/api/chat/sessions")
+                        .header("Authorization", "Bearer " + visitorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(ownSessionId));
+    }
+
+    @Test
+    void visitorCannotReadOrOperateOtherVisitorSession() throws Exception {
+        String visitorToken = fixture.login("visitor", "visitor123");
+        jdbcTemplate.update("""
+                insert into sys_users (username, password, display_name, role, online, created_at, updated_at, deleted)
+                values ('visitor2', '{noop}visitor123', '第二访客', 'VISITOR', false, current_timestamp, current_timestamp, false)
+                """);
+        String otherVisitorToken = fixture.login("visitor2", "visitor123");
+        long otherSessionId = fixture.createSession(otherVisitorToken);
+
+        mockMvc.perform(get("/api/chat/sessions/{id}/messages", otherSessionId)
+                        .header("Authorization", "Bearer " + visitorToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("权限不足"));
+
+        mockMvc.perform(post("/api/chat/sessions/{id}/handoff", otherSessionId)
+                        .header("Authorization", "Bearer " + visitorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"越权转人工\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("权限不足"));
+    }
+
+    @Test
+    void missingSessionMessagesReturnNotFound() throws Exception {
+        String token = fixture.login("visitor", "visitor123");
+
+        mockMvc.perform(get("/api/chat/sessions/{id}/messages", 99999L)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("会话不存在"));
+    }
+
+    @Test
+    void createSessionAllowsEmptyBodyAndUsesDefaultTitle() throws Exception {
+        String token = fixture.login("visitor", "visitor123");
+
+        mockMvc.perform(post("/api/chat/sessions")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.title").value("访客咨询"));
     }
 
 }

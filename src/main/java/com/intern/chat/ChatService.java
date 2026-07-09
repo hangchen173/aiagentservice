@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.intern.agent.AgentService;
 import com.intern.agent.AgentRouteDecision;
 import com.intern.aimodel.AiModelService;
-import com.intern.common.BusinessException;
 import com.intern.mapper.ChatMessageMapper;
 import com.intern.mapper.ChatSessionMapper;
 import com.intern.model.entity.AiAgent;
@@ -15,8 +14,11 @@ import com.intern.security.AuthUser;
 import com.intern.security.SecurityContext;
 import com.intern.ticket.TicketService;
 import com.intern.ws.WsPublisher;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 
@@ -48,7 +50,8 @@ public class ChatService {
         AuthUser user = SecurityContext.currentUser();
         ChatSession session = new ChatSession();
         session.setVisitorId(user.id());
-        session.setTitle((request.title() == null || request.title().isBlank()) ? "访客咨询" : request.title());
+        String requestedTitle = request == null ? null : request.title();
+        session.setTitle((requestedTitle == null || requestedTitle.isBlank()) ? "访客咨询" : requestedTitle.trim());
         session.setStatus("AI_SERVING");
         session.setCurrentAiAgentCode("general");
         chatSessionMapper.insert(session);
@@ -56,11 +59,17 @@ public class ChatService {
     }
 
     public List<ChatSession> listSessions() {
-        return chatSessionMapper.selectList(new LambdaQueryWrapper<ChatSession>()
-                .orderByDesc(ChatSession::getUpdatedAt));
+        AuthUser user = SecurityContext.currentUser();
+        LambdaQueryWrapper<ChatSession> query = new LambdaQueryWrapper<ChatSession>()
+                .orderByDesc(ChatSession::getUpdatedAt);
+        if (isVisitor(user)) {
+            query.eq(ChatSession::getVisitorId, user.id());
+        }
+        return chatSessionMapper.selectList(query);
     }
 
     public List<ChatMessage> listMessages(Long sessionId) {
+        requireAccessibleSession(sessionId, SecurityContext.currentUser());
         return chatMessageMapper.selectList(new LambdaQueryWrapper<ChatMessage>()
                 .eq(ChatMessage::getSessionId, sessionId)
                 .orderByAsc(ChatMessage::getCreatedAt));
@@ -73,7 +82,12 @@ public class ChatService {
 
     @Transactional
     public ChatMessage handleVisitorMessage(Long sessionId, String content) {
-        ChatSession session = requireSession(sessionId);
+        return handleVisitorMessage(sessionId, content, SecurityContext.currentUser());
+    }
+
+    @Transactional
+    public ChatMessage handleVisitorMessage(Long sessionId, String content, AuthUser user) {
+        ChatSession session = requireOwnedVisitorSession(sessionId, user);
         ChatMessage userMessage = saveMessage(sessionId, "VISITOR", session.getVisitorId(), content);
         wsPublisher.publish(sessionId, "CHAT_MESSAGE", content);
 
@@ -98,7 +112,12 @@ public class ChatService {
 
     @Transactional
     public Ticket handoff(Long sessionId, String reason) {
-        ChatSession session = requireSession(sessionId);
+        return handoff(sessionId, reason, SecurityContext.currentUser());
+    }
+
+    @Transactional
+    public Ticket handoff(Long sessionId, String reason, AuthUser user) {
+        ChatSession session = requireOwnedVisitorSession(sessionId, user);
         Ticket ticket = ticketService.createFromHandoff(sessionId, session.getVisitorId(), session.getCurrentAiAgentCode(), reason);
         session.setStatus("PENDING_HANDOFF");
         chatSessionMapper.updateById(session);
@@ -110,9 +129,29 @@ public class ChatService {
     private ChatSession requireSession(Long sessionId) {
         ChatSession session = chatSessionMapper.selectById(sessionId);
         if (session == null) {
-            throw new BusinessException("会话不存在");
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "会话不存在");
         }
         return session;
+    }
+
+    public ChatSession requireAccessibleSession(Long sessionId, AuthUser user) {
+        ChatSession session = requireSession(sessionId);
+        if (isVisitor(user) && !session.getVisitorId().equals(user.id())) {
+            throw new AccessDeniedException("只能访问自己的会话");
+        }
+        return session;
+    }
+
+    private ChatSession requireOwnedVisitorSession(Long sessionId, AuthUser user) {
+        ChatSession session = requireAccessibleSession(sessionId, user);
+        if (!isVisitor(user)) {
+            throw new AccessDeniedException("只有访客可以发送访客消息");
+        }
+        return session;
+    }
+
+    private boolean isVisitor(AuthUser user) {
+        return "VISITOR".equals(user.role());
     }
 
     private ChatMessage saveMessage(Long sessionId, String senderType, Long senderId, String content) {

@@ -24,7 +24,7 @@ public class ChatController {
     }
 
     @PostMapping("/sessions")
-    public ApiResponse<ChatSession> createSession(@RequestBody CreateSessionRequest request) {
+    public ApiResponse<ChatSession> createSession(@Valid @RequestBody(required = false) CreateSessionRequest request) {
         return ApiResponse.ok(chatService.createSession(request));
     }
 
@@ -44,7 +44,7 @@ public class ChatController {
     }
 
     @PostMapping("/sessions/{id}/handoff")
-    public ApiResponse<Ticket> handoff(@PathVariable Long id, @RequestBody SendMessageRequest request) {
+    public ApiResponse<Ticket> handoff(@PathVariable Long id, @Valid @RequestBody SendMessageRequest request) {
         return ApiResponse.ok(chatService.handoff(id, request.content()));
     }
 }

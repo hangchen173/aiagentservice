@@ -49,3 +49,5 @@ nexusmind:
   ai:
     dashscope-api-key: ${DASHSCOPE_API_KEY:}
     default-model: ${QWEN_MODEL:qwen3.7-plus}
+  websocket:
+    redis-pubsub-enabled: ${WEBSOCKET_REDIS_PUBSUB_ENABLED:false}
