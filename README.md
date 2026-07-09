@@ -50,6 +50,27 @@ docker compose up --build
 - 后端：`http://localhost:8080`
 - PostgreSQL 容器映射端口：`55432`
 
+## 数据库迁移
+
+项目使用 PostgreSQL 作为主数据库，并通过 Flyway 管理可迁移的数据库结构。迁移脚本位于：
+
+```text
+src/main/resources/db/migration
+```
+
+当前迁移：
+
+- `V1__init_schema.sql`：创建表、外键、约束和常用索引。
+- `V2__seed_reference_data.sql`：写入默认账号、模型和智能体种子数据。
+
+新增或修改表结构时，不要直接改已经发布过的迁移文件；应新增下一版脚本，例如：
+
+```text
+V3__add_ticket_sla_fields.sql
+```
+
+应用启动时会自动执行未应用的迁移，并在数据库中记录到 `flyway_schema_history`。Docker Compose 不再把 SQL 挂载进 PostgreSQL 初始化目录，避免只有首次创建 volume 才生效的问题。
+
 ## AI 配置
 
 项目根目录已经提供 `.env` 和 `.env.example`。本地开发时把真实 Key 写入 `.env`：
