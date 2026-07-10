@@ -25,6 +25,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -93,10 +94,11 @@ class ChatWorkflowIntegrationTest {
         assertThat(session.getStatus()).isEqualTo("PENDING_HANDOFF");
 
         List<ChatMessage> messages = chatMessageMapper.selectList(null);
-        assertThat(messages).extracting(ChatMessage::getSenderType).containsExactly("VISITOR", "AI");
+        assertThat(messages).extracting(ChatMessage::getSenderType).containsExactly("VISITOR", "AI", "SYSTEM");
         assertThat(messages).extracting(ChatMessage::getContent)
                 .anySatisfy(content -> assertThat(content).contains("申请退款"))
-                .anySatisfy(content -> assertThat(content).contains("建议转人工客服"));
+                .anySatisfy(content -> assertThat(content).contains("建议转人工客服"))
+                .anySatisfy(content -> assertThat(content).contains("已创建工单 #"));
 
         List<Ticket> tickets = ticketMapper.selectList(null);
         assertThat(tickets).hasSize(1);
@@ -165,6 +167,40 @@ class ChatWorkflowIntegrationTest {
     }
 
     @Test
+    void repeatedHandoffReusesOpenTicketAndDoesNotDuplicateSystemMessage() throws Exception {
+        String token = fixture.login("visitor", "visitor123");
+        long sessionId = fixture.createSession(token);
+
+        mockMvc.perform(post("/api/chat/sessions/{id}/handoff", sessionId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"访客主动请求转人工\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("OPEN"));
+
+        mockMvc.perform(post("/api/chat/sessions/{id}/handoff", sessionId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"访客重复点击转人工\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("OPEN"));
+
+        List<Ticket> tickets = ticketMapper.selectList(null);
+        assertThat(tickets).hasSize(1);
+        assertThat(tickets.get(0).getDescription()).isEqualTo("访客主动请求转人工");
+
+        List<HandoffRecord> handoffRecords = handoffRecordMapper.selectList(null);
+        assertThat(handoffRecords).hasSize(1);
+
+        List<ChatMessage> messages = chatMessageMapper.selectList(null);
+        assertThat(messages).hasSize(1);
+        assertThat(messages.get(0).getSenderType()).isEqualTo("SYSTEM");
+        assertThat(messages.get(0).getContent()).contains("已为你转人工并创建工单 #");
+    }
+
+    @Test
     void visitorOnlyListsOwnSessions() throws Exception {
         String visitorToken = fixture.login("visitor", "visitor123");
         long ownSessionId = fixture.createSession(visitorToken);
@@ -229,6 +265,51 @@ class ChatWorkflowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.title").value("访客咨询"));
+    }
+
+    @Test
+    void anonymousVisitorEndpointCreatesIsolatedVisitorAccounts() throws Exception {
+        String first = mockMvc.perform(post("/api/auth/visitor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.role").value("VISITOR"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        String second = mockMvc.perform(post("/api/auth/visitor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.role").value("VISITOR"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        long firstUserId = objectMapper.readTree(first).path("data").path("userId").asLong();
+        long secondUserId = objectMapper.readTree(second).path("data").path("userId").asLong();
+        assertThat(firstUserId).isNotEqualTo(secondUserId);
+    }
+
+    @Test
+    void adminCanCleanDemoSessionsAndVisitorCannot() throws Exception {
+        fixture.seedUsers("ADMIN");
+        String visitorToken = fixture.login("visitor", "visitor123");
+        String adminToken = fixture.login("admin", "admin123");
+        fixture.createSession(visitorToken);
+        mockMvc.perform(post("/api/chat/sessions")
+                        .header("Authorization", "Bearer " + visitorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"LOAD_SESSION_CLEANUP\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(delete("/api/admin/demo-data")
+                        .header("Authorization", "Bearer " + visitorToken))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(delete("/api/admin/demo-data")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.sessions").value(1));
     }
 
 }

@@ -41,7 +41,16 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         if ("CHAT_MESSAGE".equals(wsMessage.getType())) {
-            chatService.handleVisitorMessage(wsMessage.getSessionId(), wsMessage.getContent(), user);
+            chatService.handleVisitorMessageStream(wsMessage.getSessionId(), wsMessage.getContent(), user)
+                    .subscribe(
+                            ignored -> {
+                            },
+                            error -> {
+                                try {
+                                    sendError(session, wsMessage.getSessionId(), "实时 AI 回复失败，请稍后再试");
+                                } catch (Exception ignored) {
+                                }
+                            });
             return;
         }
         if ("HANDOFF_REQUEST".equals(wsMessage.getType())) {

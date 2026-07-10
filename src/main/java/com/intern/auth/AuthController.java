@@ -24,6 +24,11 @@ public class AuthController {
         return ApiResponse.ok(authService.login(request));
     }
 
+    @PostMapping("/visitor")
+    public ApiResponse<LoginResponse> visitor() {
+        return ApiResponse.ok(authService.createVisitor());
+    }
+
     @GetMapping("/me")
     public ApiResponse<AuthUser> me() {
         return ApiResponse.ok(SecurityContext.currentUser());

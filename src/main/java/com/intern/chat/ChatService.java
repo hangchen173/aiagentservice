@@ -19,6 +19,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -105,9 +106,42 @@ public class ChatService {
             Ticket ticket = ticketService.createFromHandoff(sessionId, session.getVisitorId(), routedAgent.getCode(), content);
             session.setStatus("PENDING_HANDOFF");
             chatSessionMapper.updateById(session);
-            wsPublisher.publish(sessionId, "TICKET_CREATED", "已创建工单 #" + ticket.getId());
+            String notice = "已创建工单 #" + ticket.getId();
+            saveMessage(sessionId, "SYSTEM", null, notice);
+            wsPublisher.publish(sessionId, "TICKET_CREATED", notice);
         }
         return aiMessage.getId() == null ? userMessage : aiMessage;
+    }
+
+    public Flux<String> handleVisitorMessageStream(Long sessionId, String content, AuthUser user) {
+        ChatSession session = requireOwnedVisitorSession(sessionId, user);
+        saveMessage(sessionId, "VISITOR", session.getVisitorId(), content);
+        wsPublisher.publish(sessionId, "CHAT_MESSAGE", content);
+
+        AgentRouteDecision routeDecision = agentService.decideRoute(content);
+        AiAgent routedAgent = routeDecision.agent();
+        session.setCurrentAiAgentCode(routedAgent.getCode());
+        chatSessionMapper.updateById(session);
+
+        wsPublisher.publish(sessionId, "SYSTEM_NOTICE", routedAgent.getName() + " 已接入");
+        StringBuilder reply = new StringBuilder();
+        return aiModelService.stream(sessionId, routedAgent, content)
+                .doOnNext(chunk -> {
+                    reply.append(chunk);
+                    wsPublisher.publish(sessionId, "AI_MESSAGE_DELTA", chunk);
+                })
+                .doOnComplete(() -> {
+                    saveMessage(sessionId, "AI", null, reply.toString());
+                    wsPublisher.publish(sessionId, "AI_MESSAGE_DONE", reply.toString());
+                    if (routeDecision.handoffRecommended()) {
+                        Ticket ticket = ticketService.createFromHandoff(sessionId, session.getVisitorId(), routedAgent.getCode(), content);
+                        session.setStatus("PENDING_HANDOFF");
+                        chatSessionMapper.updateById(session);
+                        String notice = "已创建工单 #" + ticket.getId();
+                        saveMessage(sessionId, "SYSTEM", null, notice);
+                        wsPublisher.publish(sessionId, "TICKET_CREATED", notice);
+                    }
+                });
     }
 
     @Transactional
@@ -121,8 +155,11 @@ public class ChatService {
         Ticket ticket = ticketService.createFromHandoff(sessionId, session.getVisitorId(), session.getCurrentAiAgentCode(), reason);
         session.setStatus("PENDING_HANDOFF");
         chatSessionMapper.updateById(session);
-        saveMessage(sessionId, "SYSTEM", null, "已为你转人工并创建工单 #" + ticket.getId());
-        wsPublisher.publish(sessionId, "TICKET_CREATED", "已为你转人工并创建工单 #" + ticket.getId());
+        String notice = "已为你转人工并创建工单 #" + ticket.getId();
+        if (!hasSystemMessage(sessionId, notice)) {
+            saveMessage(sessionId, "SYSTEM", null, notice);
+        }
+        wsPublisher.publish(sessionId, "TICKET_CREATED", notice);
         return ticket;
     }
 
@@ -152,6 +189,14 @@ public class ChatService {
 
     private boolean isVisitor(AuthUser user) {
         return "VISITOR".equals(user.role());
+    }
+
+    private boolean hasSystemMessage(Long sessionId, String content) {
+        Long count = chatMessageMapper.selectCount(new LambdaQueryWrapper<ChatMessage>()
+                .eq(ChatMessage::getSessionId, sessionId)
+                .eq(ChatMessage::getSenderType, "SYSTEM")
+                .eq(ChatMessage::getContent, content));
+        return count != null && count > 0;
     }
 
     private ChatMessage saveMessage(Long sessionId, String senderType, Long senderId, String content) {

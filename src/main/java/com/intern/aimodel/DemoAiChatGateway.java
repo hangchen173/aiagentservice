@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class DemoAiChatGateway {
     public String complete(AiModel model, String systemPrompt, String userMessage) {
-        String lower = (systemPrompt + "\n" + userMessage).toLowerCase();
+        String lower = userMessage == null ? "" : userMessage.toLowerCase();
         if (lower.contains("退款") || lower.contains("投诉") || lower.contains("人工")) {
             return "我理解你的诉求。这个问题建议转人工客服进一步核实，我也会同步生成工单，方便后续跟进处理。";
         }

@@ -11,11 +11,13 @@ import java.util.Optional;
 public class AgentRoutingPolicy {
     private static final List<String> HANDOFF_KEYWORDS = List.of("人工", "转人工", "投诉", "退款", "主管", "举报", "不满意");
     private static final String GENERAL_AGENT_CODE = "general";
+    private static final String HANDOFF_AGENT_CODE = "handoff";
 
     public AgentRouteDecision decide(String content, List<AiAgent> agents) {
         String normalized = normalize(content);
         Optional<AgentKeywordMatch> selectedMatch = agents.stream()
                 .filter(this::enabled)
+                .filter(agent -> !HANDOFF_AGENT_CODE.equals(agent.getCode()))
                 .map(agent -> match(agent, normalized))
                 .flatMap(Optional::stream)
                 .min(Comparator.comparing(candidate -> priority(candidate.agent())));

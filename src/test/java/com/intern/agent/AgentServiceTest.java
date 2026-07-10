@@ -18,6 +18,7 @@ class AgentServiceTest {
         AiAgentMapper mapper = mock(AiAgentMapper.class);
         when(mapper.selectList(any())).thenReturn(List.of(
                 agent("general", "通用", 100, "你好,咨询"),
+                agent("handoff", "转人工", 5, "人工,转人工"),
                 agent("complaint", "投诉", 10, "投诉,人工")
         ));
 
@@ -28,6 +29,22 @@ class AgentServiceTest {
         assertThat(decision.agent().getCode()).isEqualTo("complaint");
         assertThat(decision.matchedKeyword()).isEqualTo("投诉");
         assertThat(decision.fallback()).isFalse();
+        assertThat(decision.handoffRecommended()).isTrue();
+    }
+
+    @Test
+    void handoffAgentDoesNotOverrideBusinessRoute() {
+        AiAgentMapper mapper = mock(AiAgentMapper.class);
+        when(mapper.selectList(any())).thenReturn(List.of(
+                agent("handoff", "转人工", 5, "人工,转人工,主管"),
+                agent("complaint", "投诉", 10, "投诉,人工,主管"),
+                agent("general", "通用", 100, "你好")
+        ));
+
+        AgentService service = new AgentService(mapper, new AgentRoutingPolicy());
+
+        AgentRouteDecision decision = service.decideRoute("我要投诉并转人工");
+        assertThat(decision.agent().getCode()).isEqualTo("complaint");
         assertThat(decision.handoffRecommended()).isTrue();
     }
 

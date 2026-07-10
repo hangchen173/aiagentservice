@@ -1,6 +1,7 @@
 package com.intern.config;
 
 import com.intern.security.JwtAuthenticationFilter;
+import com.intern.security.RateLimitFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -23,7 +24,10 @@ import java.util.List;
 @EnableWebSecurity
 public class SecurityConfig {
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter)
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            RateLimitFilter rateLimitFilter)
             throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -45,12 +49,14 @@ public class SecurityConfig {
                             response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"权限不足\"}");
                         }))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/ws/**").permitAll()
+                        .requestMatchers("/api/auth/login", "/api/auth/visitor", "/ws/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/chat/sessions").hasAnyRole("ADMIN", "AGENT", "VISITOR")
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/agents/**", "/api/models/**", "/api/logs/**").hasRole("ADMIN")
                         .requestMatchers("/api/tickets/**").hasAnyRole("ADMIN", "AGENT")
                         .requestMatchers("/api/chat/**").hasAnyRole("ADMIN", "AGENT", "VISITOR")
                         .anyRequest().permitAll())
+                .addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
