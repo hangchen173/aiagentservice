@@ -18,6 +18,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   height: 60px;
   padding: 0 24px;
   border-bottom: 1px solid #dce2ea;
@@ -28,6 +29,7 @@ body {
   font-size: 18px;
   font-weight: 700;
   color: #16324f;
+  overflow-wrap: anywhere;
 }
 
 .workspace {
@@ -52,6 +54,7 @@ body {
   border: 1px solid #dce2ea;
   border-radius: 8px;
   padding: 16px;
+  min-width: 0;
 }
 
 .chat-layout {
@@ -115,7 +118,20 @@ body {
   margin-top: 6px;
 }
 
+.maintenance-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 16px;
+}
+
 @media (max-width: 800px) {
+  .topbar {
+    height: auto;
+    min-height: 60px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -123,9 +139,41 @@ body {
   .sidebar {
     border-right: 0;
     border-bottom: 1px solid #dce2ea;
+    padding: 8px 12px;
   }
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .main {
+    padding: 12px;
+  }
+
+  .panel {
+    overflow-x: auto;
+    padding: 12px;
+  }
+
+  .composer {
+    flex-direction: column;
+  }
+
+  .maintenance-bar {
+    justify-content: stretch;
+  }
+
+  .maintenance-bar .el-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .metric {
+    padding: 12px;
   }
 }

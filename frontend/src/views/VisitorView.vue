@@ -10,7 +10,7 @@
       <section class="panel chat-layout">
         <div ref="messageList" class="messages">
           <el-empty v-if="!messages.length && !typing" description="请输入问题开始咨询" />
-          <div v-for="message in messages" :key="message.id || message.content" class="message" :class="message.senderType.toLowerCase()">
+          <div v-for="message in messages" :key="message.id || message.localId" class="message" :class="message.senderType.toLowerCase()">
             <strong>{{ labelOf(message.senderType) }}</strong>
             <div>{{ message.content }}</div>
           </div>
@@ -18,8 +18,8 @@
         </div>
         <div class="composer">
           <el-input v-model="draft" :disabled="sending" placeholder="请输入你的问题" @keyup.enter="send" />
-          <el-button type="primary" :loading="sending" :disabled="!draft.trim() || !session" @click="send">发送</el-button>
-          <el-button :loading="handoffSending" :disabled="sending || handoffSending || !session" @click="handoff">转人工</el-button>
+          <el-button type="primary" :loading="sending" :disabled="!draft.trim()" @click="send">发送</el-button>
+          <el-button :loading="handoffSending" :disabled="sending || handoffSending" @click="handoff">转人工</el-button>
         </div>
       </section>
     </main>
@@ -40,6 +40,7 @@ interface ChatSession {
 
 interface ChatMessage {
   id?: number
+  localId?: string
   senderType: string
   content: string
 }
@@ -57,16 +58,16 @@ const longWait = ref(false)
 const canOpenConsole = computed(() => auth.hasAnyRole(['ADMIN', 'AGENT']))
 let socket: WebSocket | null = null
 let longWaitTimer: number | undefined
+let localMessageId = 0
+let streamingAiMessage: ChatMessage | null = null
 
 onMounted(async () => {
   try {
-    if (!auth.token) {
-      await auth.login('visitor', 'visitor123')
+    if (!auth.hasAnyRole(['ADMIN', 'AGENT'])) {
+      await auth.startVisitor()
     }
-    session.value = await api<ChatSession>(http.post('/chat/sessions', { title: '访客咨询' }))
-    connect()
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '访客会话创建失败')
+    ElMessage.error(error instanceof Error ? error.message : '访客登录失败')
   }
 })
 
@@ -81,6 +82,13 @@ function connect() {
   socket.onopen = () => socket?.send(JSON.stringify({ type: 'JOIN_SESSION', sessionId: session.value?.id }))
   socket.onmessage = (event) => {
     const payload = JSON.parse(event.data)
+    if (payload.type === 'AI_MESSAGE_DELTA') {
+      appendAiDelta(payload.content || '')
+    }
+    if (payload.type === 'AI_MESSAGE_DONE') {
+      finishWaiting()
+      streamingAiMessage = null
+    }
     if (payload.type === 'AI_MESSAGE') {
       finishWaiting()
       addMessage({ senderType: 'AI', content: payload.content })
@@ -101,16 +109,17 @@ function connect() {
 }
 
 async function send() {
-  if (sending.value || !draft.value.trim() || !session.value) return
+  if (sending.value || !draft.value.trim()) return
   const content = draft.value.trim()
   draft.value = ''
   startWaiting()
   addMessage({ senderType: 'VISITOR', content })
   try {
+    const activeSession = await ensureSession()
     if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'CHAT_MESSAGE', sessionId: session.value.id, content }))
+      socket.send(JSON.stringify({ type: 'CHAT_MESSAGE', sessionId: activeSession.id, content }))
     } else {
-      const response = await api<ChatMessage>(http.post(`/chat/sessions/${session.value.id}/messages`, { content }))
+      const response = await api<ChatMessage>(http.post(`/chat/sessions/${activeSession.id}/messages`, { content }))
       finishWaiting()
       addMessage(response)
     }
@@ -121,13 +130,14 @@ async function send() {
 }
 
 async function handoff() {
-  if (handoffSending.value || sending.value || !session.value) return
+  if (handoffSending.value || sending.value) return
   handoffSending.value = true
   try {
+    const activeSession = await ensureSession()
     if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'HANDOFF_REQUEST', sessionId: session.value.id, content: '访客主动请求转人工' }))
+      socket.send(JSON.stringify({ type: 'HANDOFF_REQUEST', sessionId: activeSession.id, content: '访客主动请求转人工' }))
     } else {
-      await api(http.post(`/chat/sessions/${session.value.id}/handoff`, { content: '访客主动请求转人工' }))
+      await api(http.post(`/chat/sessions/${activeSession.id}/handoff`, { content: '访客主动请求转人工' }))
       addMessage({ senderType: 'SYSTEM', content: '已提交转人工请求，请等待客服处理' })
     }
   } catch (error) {
@@ -145,8 +155,36 @@ function goConsole() {
   router.push(canOpenConsole.value ? '/console/chat' : '/login')
 }
 
+async function ensureSession() {
+  if (session.value) {
+    return session.value
+  }
+  session.value = await api<ChatSession>(http.post('/chat/sessions', { title: '访客咨询' }))
+  connect()
+  return session.value
+}
+
 function addMessage(message: ChatMessage) {
+  if (!message.id && !message.localId) {
+    message.localId = `local-${++localMessageId}`
+  }
   messages.value.push(message)
+  scrollToBottom()
+}
+
+function appendAiDelta(content: string) {
+  if (!streamingAiMessage) {
+    streamingAiMessage = { localId: `local-${++localMessageId}`, senderType: 'AI', content: '' }
+    messages.value.push(streamingAiMessage)
+  }
+  typing.value = false
+  longWait.value = false
+  window.clearTimeout(longWaitTimer)
+  streamingAiMessage.content += content
+  scrollToBottom()
+}
+
+function scrollToBottom() {
   nextTick(() => {
     if (messageList.value) {
       messageList.value.scrollTop = messageList.value.scrollHeight

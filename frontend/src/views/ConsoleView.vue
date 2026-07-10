@@ -20,6 +20,9 @@
           <div v-if="isAdmin" class="metric">智能体<strong>{{ agents.length }}</strong></div>
           <div v-if="isAdmin" class="metric">模型<strong>{{ models.length }}</strong></div>
         </div>
+        <div v-if="isAdmin" class="maintenance-bar">
+          <el-button :loading="cleanupLoading" @click="cleanupDemoData">清理演示数据</el-button>
+        </div>
 
         <section v-if="activeTab === 'chat'" v-loading="loading" class="panel">
           <div class="panel-header">
@@ -216,6 +219,14 @@ interface RoutePreview {
   handoffRecommended: boolean
 }
 
+interface DemoDataCleanupResponse {
+  sessions: number
+  messages: number
+  tickets: number
+  handoffRecords: number
+  modelCallLogs: number
+}
+
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
@@ -228,6 +239,7 @@ const logs = ref<ModelCallLog[]>([])
 const routePreviewText = ref('')
 const routePreview = ref<RoutePreview | null>(null)
 const routePreviewLoading = ref(false)
+const cleanupLoading = ref(false)
 const loading = ref(false)
 const activeTab = computed(() => String(route.params.tab || 'chat'))
 const isAdmin = computed(() => auth.user?.role === 'ADMIN')
@@ -330,6 +342,20 @@ async function previewRoute() {
     ElMessage.error(error instanceof Error ? error.message : '预览失败')
   } finally {
     routePreviewLoading.value = false
+  }
+}
+
+async function cleanupDemoData() {
+  cleanupLoading.value = true
+  try {
+    const result = await api<DemoDataCleanupResponse>(http.delete('/admin/demo-data'))
+    ElMessage.success(`已清理 ${result.sessions} 个会话、${result.messages} 条消息、${result.tickets} 个工单`)
+    messages.value = []
+    await refresh()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '清理失败')
+  } finally {
+    cleanupLoading.value = false
   }
 }
 

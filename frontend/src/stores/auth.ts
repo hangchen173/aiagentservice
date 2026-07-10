@@ -22,6 +22,16 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data))
     },
+    async startVisitor() {
+      if (this.token && this.user?.role === 'VISITOR') {
+        return
+      }
+      const data = await api<LoginResponse>(http.post('/auth/visitor'))
+      this.token = data.token
+      this.user = data
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data))
+    },
     hasAnyRole(roles: string[]) {
       return Boolean(this.user?.role && roles.includes(this.user.role))
     },
