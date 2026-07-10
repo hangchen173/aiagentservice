@@ -26,7 +26,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: nexusmind-backend
     env_file:
       - .env
     environment:
@@ -34,8 +33,10 @@ services:
       SPRING_DATASOURCE_USERNAME: intern_user
       SPRING_DATASOURCE_PASSWORD: intern_pass
       REDIS_HOST: redis
+      WEBSOCKET_REDIS_PUBSUB_ENABLED: "true"
+      RATE_LIMIT_REDIS_ENABLED: "true"
     ports:
-      - "8080:8080"
+      - "8080-8081:8080"
     depends_on:
       postgres:
         condition: service_healthy

@@ -43,6 +43,14 @@ Docker 一键启动：
 docker compose up --build
 ```
 
+多实例 WebSocket/Redis 模式验收：
+
+```bash
+docker compose up --build --scale backend=2
+```
+
+Compose 中后端会打开 `WEBSOCKET_REDIS_PUBSUB_ENABLED=true` 和 `RATE_LIMIT_REDIS_ENABLED=true`。两个后端实例会共享 Redis Pub/Sub 广播和 Redis 限流计数；前端容器仍通过 `http://localhost:3000` 访问。验收时可以打开两个浏览器窗口加入同一会话，发送消息后应能看到增量 AI 回复和工单通知正常推送。
+
 访问地址：
 
 - 前端容器：`http://localhost:3000`
@@ -83,3 +91,17 @@ JWT_SECRET=请替换为更长的随机密钥
 ```
 
 当前模型调用层使用 Spring AI `ChatClient`，通过阿里云百炼/DashScope OpenAI 兼容接口调用 Qwen。配置 `DASHSCOPE_API_KEY` 后会调用数据库中启用的模型，默认是 `qwen3.7-plus`；未配置 API Key 时会走本地演示网关，保证系统闭环可运行。
+
+AI 调用相关保护参数：
+
+```properties
+AI_TIMEOUT_SECONDS=20
+AI_HTTP_CONNECT_TIMEOUT_SECONDS=5
+AI_HTTP_READ_TIMEOUT_SECONDS=20
+AI_MAX_TOKENS_LIMIT=600
+AI_EXECUTOR_CORE_SIZE=4
+AI_EXECUTOR_MAX_SIZE=8
+AI_EXECUTOR_QUEUE_CAPACITY=40
+```
+
+其中业务层超时负责用户兜底回复和调用日志，HTTP 连接/读取超时会传入 Spring AI OpenAI 底层 `RestClient`。访客使用 WebSocket 发送消息时，后端会通过 Spring AI streaming 推送增量 AI 回复；无真实 API Key 时，本地演示网关也会模拟增量输出。
