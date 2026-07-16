@@ -14,8 +14,8 @@ public class AdminMaintenanceController {
         this.cleanupService = cleanupService;
     }
 
-    @DeleteMapping("/demo-data")
-    public ApiResponse<DemoDataCleanupResponse> cleanupDemoData() {
+    @DeleteMapping("/history")
+    public ApiResponse<DemoDataCleanupResponse> cleanupHistory() {
         return ApiResponse.ok(cleanupService.cleanup());
     }
 }

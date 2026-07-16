@@ -177,7 +177,7 @@ public class AiModelService {
             return model;
         }
         AiModel fallback = new AiModel();
-        fallback.setProvider("DASHSCOPE");
+        fallback.setProvider("DEEPSEEK");
         fallback.setModelName(defaultModel);
         fallback.setTemperature(BigDecimal.valueOf(0.7));
         fallback.setMaxTokens(Math.min(600, maxTokensLimit));

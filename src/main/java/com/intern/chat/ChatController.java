@@ -50,6 +50,12 @@ public class ChatController {
         return ApiResponse.ok(chatService.sendRestMessage(id, request));
     }
 
+    @PostMapping("/sessions/{id}/agent-messages")
+    public ApiResponse<ChatMessage> sendAgentMessage(@PathVariable Long id,
+                                                      @Valid @RequestBody SendMessageRequest request) {
+        return ApiResponse.ok(chatService.sendAgentMessage(id, request.content()));
+    }
+
     @PostMapping(value = "/sessions/{id}/messages/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ChatMessage> sendImage(
             @PathVariable Long id,

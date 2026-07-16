@@ -6,9 +6,8 @@ import com.intern.mapper.SysUserMapper;
 import com.intern.model.entity.SysUser;
 import com.intern.security.JwtService;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
-
-import java.util.UUID;
 
 @Service
 public class AuthService {
@@ -32,15 +31,22 @@ public class AuthService {
         return new LoginResponse(token, user.getId(), user.getUsername(), user.getDisplayName(), user.getRole());
     }
 
-    public LoginResponse createVisitor() {
-        String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+    public LoginResponse register(RegisterRequest request) {
+        String username = request.username().trim();
+        if (sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username)) > 0) {
+            throw new BusinessException("用户名已被使用");
+        }
         SysUser user = new SysUser();
-        user.setUsername("visitor_" + suffix);
-        user.setPassword("{noop}" + UUID.randomUUID());
-        user.setDisplayName("访客 " + suffix);
+        user.setUsername(username);
+        user.setPassword(passwordEncoder.encode(request.password()));
+        user.setDisplayName(request.displayName().trim());
         user.setRole("VISITOR");
         user.setOnline(false);
-        sysUserMapper.insert(user);
+        try {
+            sysUserMapper.insert(user);
+        } catch (DuplicateKeyException ex) {
+            throw new BusinessException("用户名已被使用");
+        }
         String token = jwtService.createToken(user.getId(), user.getUsername(), user.getRole());
         return new LoginResponse(token, user.getId(), user.getUsername(), user.getDisplayName(), user.getRole());
     }

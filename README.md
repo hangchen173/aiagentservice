@@ -1,25 +1,18 @@
 # NexusMind 多智能体客服中枢
 
-NexusMind 是一个面向企业实训演示的多智能体客服系统，技术栈为 Java 21、Spring Boot、Spring AI、Spring MVC、MyBatis-Plus、PostgreSQL、Vue 3、WebSocket 和 Qwen 模型适配。
+NexusMind 是一个多智能体客服系统，技术栈为 Java 21、Spring Boot、Spring AI、MyBatis-Plus、PostgreSQL、Vue 3 和 WebSocket。文本服务使用 DeepSeek，图片识别使用 Qwen VL。
 
 ## 功能
 
-- JWT 三角色登录：管理员、客服坐席、访客。
+- JWT 三角色登录：管理员、客服坐席、注册用户。
+- 用户公开注册，管理员和客服账号仅通过本机环境变量预置。
 - 访客聊天接入，支持 WebSocket 实时消息。
 - 规则调度多个客服智能体：通用、售前、售后、投诉、转人工。
-- 默认模型配置为 `qwen3.7-plus`。
+- 默认文本模型配置为 `deepseek-v4-flash`。
 - 访客可上传 JPG、PNG、GIF 图片，并使用独立的 Qwen VL 模型识别图片内容。
 - AI 回复、模型调用日志、会话消息入库。
 - 明确触发人工、投诉、退款时创建转人工记录和工单。
-- 管理端支持会话、工单、智能体、模型、调用日志查看与部分编辑。
-
-## 默认账号
-
-| 角色 | 账号 | 密码 |
-|---|---|---|
-| 管理员 | `admin` | `admin123` |
-| 客服 | `agent` | `agent123` |
-| 访客 | `visitor` | `visitor123` |
+- 客服可接单、实时回复、关闭和删除已完成工单；管理员可清理全部业务历史。
 
 ## 本地启动
 
@@ -70,7 +63,8 @@ src/main/resources/db/migration
 当前迁移：
 
 - `V1__init_schema.sql`：创建表、外键、约束和常用索引。
-- `V2__seed_reference_data.sql`：写入默认账号、模型和智能体种子数据。
+- `V2__seed_reference_data.sql`：历史参考数据迁移，其演示账号会由 V4 停用。
+- `V4__secure_accounts_and_deepseek.sql`：停用旧演示账号，并迁移文本模型配置。
 
 新增或修改表结构时，不要直接改已经发布过的迁移文件；应新增下一版脚本，例如：
 
@@ -85,14 +79,20 @@ V3__add_ticket_sla_fields.sql
 项目根目录已经提供 `.env` 和 `.env.example`。本地开发时把真实 Key 写入 `.env`：
 
 ```properties
+DEEPSEEK_API_KEY=你的DeepSeek Key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
 DASHSCOPE_API_KEY=你的百炼或DashScope Key
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode
-QWEN_MODEL=qwen3.7-plus
 QWEN_VISION_MODEL=qwen-vl-max
 JWT_SECRET=请替换为更长的随机密钥
+BOOTSTRAP_ADMIN_USERNAME=管理员账号
+BOOTSTRAP_ADMIN_PASSWORD=至少12位强密码
+BOOTSTRAP_AGENT_USERNAME=客服账号
+BOOTSTRAP_AGENT_PASSWORD=至少12位强密码
 ```
 
-当前模型调用层使用 Spring AI `ChatClient`，通过阿里云百炼/DashScope OpenAI 兼容接口调用 Qwen。配置 `DASHSCOPE_API_KEY` 后会调用数据库中启用的模型，默认是 `qwen3.7-plus`；未配置 API Key 时会走本地演示网关，保证系统闭环可运行。
+文本与视觉调用使用相互独立的 Spring AI 客户端。`DEEPSEEK_API_KEY` 用于文本及流式回复，`DASHSCOPE_API_KEY` 仅用于 Qwen 图片识别；未配置真实 Key 时使用本地演示回复。管理员和客服账号在每次启动时由环境变量同步到 PostgreSQL，密码只以哈希形式保存。
 
 AI 调用相关保护参数：
 

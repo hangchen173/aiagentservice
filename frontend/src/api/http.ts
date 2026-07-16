@@ -19,6 +19,17 @@ http.interceptors.request.use((config) => {
   return config
 })
 
+http.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401 && !String(error.config?.url || '').includes('/auth/login')) {
+      useAuthStore().logout()
+      if (window.location.pathname !== '/login') window.location.assign('/login')
+    }
+    return Promise.reject(error)
+  }
+)
+
 export async function api<T>(promise: Promise<{ data: ApiResponse<T> }>) {
   try {
     const response = await promise

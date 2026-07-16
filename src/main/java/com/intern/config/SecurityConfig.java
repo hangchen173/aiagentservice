@@ -49,8 +49,8 @@ public class SecurityConfig {
                             response.getWriter().write("{\"success\":false,\"data\":null,\"message\":\"权限不足\"}");
                         }))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/api/auth/visitor", "/ws/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/chat/sessions").hasAnyRole("ADMIN", "AGENT", "VISITOR")
+                        .requestMatchers("/api/auth/login", "/api/auth/register", "/ws/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/chat/sessions").hasRole("VISITOR")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/agents/**", "/api/models/**", "/api/logs/**").hasRole("ADMIN")
                         .requestMatchers("/api/tickets/**").hasAnyRole("ADMIN", "AGENT")

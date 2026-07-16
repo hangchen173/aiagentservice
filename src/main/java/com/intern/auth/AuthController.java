@@ -24,9 +24,9 @@ public class AuthController {
         return ApiResponse.ok(authService.login(request));
     }
 
-    @PostMapping("/visitor")
-    public ApiResponse<LoginResponse> visitor() {
-        return ApiResponse.ok(authService.createVisitor());
+    @PostMapping("/register")
+    public ApiResponse<LoginResponse> register(@Valid @RequestBody RegisterRequest request) {
+        return ApiResponse.ok(authService.register(request));
     }
 
     @GetMapping("/me")

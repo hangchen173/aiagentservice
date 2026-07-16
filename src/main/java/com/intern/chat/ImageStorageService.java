@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 
 @Service
 public class ImageStorageService {
@@ -75,6 +76,18 @@ public class ImageStorageService {
             return Files.readAllBytes(image);
         } catch (IOException ex) {
             throw new BusinessException("图片读取失败");
+        }
+    }
+
+    public void deleteAll(List<String> keys) {
+        for (String key : keys) {
+            if (key != null && key.matches("[0-9a-fA-F-]+\\.(jpg|png|gif)")) {
+                try {
+                    Files.deleteIfExists(storageRoot.resolve(key).normalize());
+                } catch (IOException ignored) {
+                    // Database cleanup remains authoritative; orphan files can be removed on maintenance.
+                }
+            }
         }
     }
 }

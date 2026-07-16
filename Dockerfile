@@ -3,7 +3,8 @@ FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
 COPY src ./src
-RUN mvn -q -Dmaven.test.skip=true -Dmaven.wagon.http.retryHandler.count=5 package
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn -q -Dmaven.test.skip=true -Dmaven.wagon.http.retryHandler.count=5 package
 
 FROM eclipse-temurin:21-jre
 

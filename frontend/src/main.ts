@@ -12,6 +12,10 @@ import {
   ElMenu,
   ElMenuItem,
   ElSwitch,
+  ElTag,
+  ElSelect,
+  ElOption,
+  ElTooltip,
   ElTable,
   ElTableColumn
 } from 'element-plus'
@@ -36,6 +40,10 @@ app
   .use(ElMenu)
   .use(ElMenuItem)
   .use(ElSwitch)
+  .use(ElTag)
+  .use(ElSelect)
+  .use(ElOption)
+  .use(ElTooltip)
   .use(ElTable)
   .use(ElTableColumn)
   .mount('#app')

@@ -38,6 +38,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        "nexusmind.bootstrap.admin.username=test_admin",
+        "nexusmind.bootstrap.admin.password=test-admin-password",
+        "nexusmind.bootstrap.agent.username=test_agent",
+        "nexusmind.bootstrap.agent.password=test-agent-password",
         "nexusmind.ai.dashscope-api-key=",
         "nexusmind.chat.image-storage-path=./target/test-chat-images"
 })
@@ -317,29 +321,23 @@ class ChatWorkflowIntegrationTest {
     }
 
     @Test
-    void anonymousVisitorEndpointCreatesIsolatedVisitorAccounts() throws Exception {
-        String first = mockMvc.perform(post("/api/auth/visitor"))
+    void publicRegistrationCreatesVisitorAndRejectsDuplicateUsername() throws Exception {
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"new_user\",\"displayName\":\"新用户\",\"password\":\"securePass123\",\"role\":\"AGENT\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.role").value("VISITOR"))
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
-        String second = mockMvc.perform(post("/api/auth/visitor"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.role").value("VISITOR"))
-                .andReturn()
-                .getResponse()
-                .getContentAsString();
+                .andExpect(jsonPath("$.data.role").value("VISITOR"));
 
-        long firstUserId = objectMapper.readTree(first).path("data").path("userId").asLong();
-        long secondUserId = objectMapper.readTree(second).path("data").path("userId").asLong();
-        assertThat(firstUserId).isNotEqualTo(secondUserId);
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"new_user\",\"displayName\":\"另一个用户\",\"password\":\"securePass456\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("用户名已被使用"));
     }
 
     @Test
-    void adminCanCleanDemoSessionsAndVisitorCannot() throws Exception {
+    void adminCanCleanAllHistoryAndVisitorCannot() throws Exception {
         fixture.seedUsers("ADMIN");
         String visitorToken = fixture.login("visitor", "visitor123");
         String adminToken = fixture.login("admin", "admin123");
@@ -350,15 +348,53 @@ class ChatWorkflowIntegrationTest {
                         .content("{\"title\":\"LOAD_SESSION_CLEANUP\"}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(delete("/api/admin/demo-data")
+        mockMvc.perform(delete("/api/admin/history")
                         .header("Authorization", "Bearer " + visitorToken))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(delete("/api/admin/demo-data")
+        mockMvc.perform(delete("/api/admin/history")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.sessions").value(1));
+                .andExpect(jsonPath("$.data.sessions").value(2));
+    }
+
+    @Test
+    void agentCanAcceptReplyCloseAndDeleteOwnHandoffTicket() throws Exception {
+        fixture.seedUsers("AGENT");
+        String visitorToken = fixture.login("visitor", "visitor123");
+        String agentToken = fixture.login("agent", "agent123");
+        long sessionId = fixture.createSession(visitorToken);
+
+        mockMvc.perform(post("/api/chat/sessions/{id}/handoff", sessionId)
+                        .header("Authorization", "Bearer " + visitorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"需要人工处理\"}"))
+                .andExpect(status().isOk());
+        Ticket ticket = ticketMapper.selectList(null).getFirst();
+
+        mockMvc.perform(post("/api/tickets/{id}/accept", ticket.getId())
+                        .header("Authorization", "Bearer " + agentToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PROCESSING"));
+
+        mockMvc.perform(post("/api/chat/sessions/{id}/agent-messages", sessionId)
+                        .header("Authorization", "Bearer " + agentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"您好，我来协助处理。\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.senderType").value("AGENT"));
+
+        mockMvc.perform(post("/api/tickets/{id}/close", ticket.getId())
+                        .header("Authorization", "Bearer " + agentToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("CLOSED"));
+        mockMvc.perform(delete("/api/tickets/{id}", ticket.getId())
+                        .header("Authorization", "Bearer " + agentToken))
+                .andExpect(status().isOk());
+
+        assertThat(ticketMapper.selectById(ticket.getId())).isNull();
+        assertThat(chatSessionMapper.selectById(sessionId).getStatus()).isEqualTo("CLOSED");
     }
 
 }

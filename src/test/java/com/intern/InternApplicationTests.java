@@ -7,7 +7,11 @@ import org.springframework.boot.test.context.SpringBootTest;
         "spring.datasource.url=jdbc:h2:mem:testdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
-        "spring.datasource.password="
+        "spring.datasource.password=",
+        "nexusmind.bootstrap.admin.username=test_admin",
+        "nexusmind.bootstrap.admin.password=test-admin-password",
+        "nexusmind.bootstrap.agent.username=test_agent",
+        "nexusmind.bootstrap.agent.password=test-agent-password"
 })
 class InternApplicationTests {
 

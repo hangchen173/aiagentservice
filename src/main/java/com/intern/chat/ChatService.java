@@ -55,6 +55,9 @@ public class ChatService {
 
     public ChatSession createSession(CreateSessionRequest request) {
         AuthUser user = SecurityContext.currentUser();
+        if (!isVisitor(user)) {
+            throw new AccessDeniedException("只有普通用户可以创建咨询会话");
+        }
         ChatSession session = new ChatSession();
         session.setVisitorId(user.id());
         String requestedTitle = request == null ? null : request.title();
@@ -117,6 +120,22 @@ public class ChatService {
             wsPublisher.publish(sessionId, "TICKET_CREATED", notice);
         }
         return aiMessage.getId() == null ? userMessage : aiMessage;
+    }
+
+    @Transactional
+    public ChatMessage sendAgentMessage(Long sessionId, String content) {
+        AuthUser user = SecurityContext.currentUser();
+        if (!"AGENT".equals(user.role()) && !"ADMIN".equals(user.role())) {
+            throw new AccessDeniedException("只有客服可以回复");
+        }
+        ChatSession session = requireAccessibleSession(sessionId, user);
+        if ("CLOSED".equals(session.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "会话已关闭");
+        }
+        ticketService.requireReplyAllowed(sessionId, user);
+        ChatMessage message = saveMessage(sessionId, "AGENT", user.id(), content);
+        wsPublisher.publish(sessionId, "AGENT_MESSAGE", content);
+        return message;
     }
 
     public ChatMessage handleImageMessage(Long sessionId, String content, MultipartFile image) {

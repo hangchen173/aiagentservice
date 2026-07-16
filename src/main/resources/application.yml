@@ -17,11 +17,11 @@ spring:
       port: ${REDIS_PORT:6379}
   ai:
     openai:
-      api-key: ${DASHSCOPE_API_KEY:nexusmind-demo-key}
-      base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      api-key: ${DEEPSEEK_API_KEY:nexusmind-demo-key}
+      base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
       chat:
         options:
-          model: ${QWEN_MODEL:qwen3.7-plus}
+          model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
   servlet:
     multipart:
       max-file-size: 8MB
@@ -49,12 +49,23 @@ mybatis-plus:
       logic-not-delete-value: false
 
 nexusmind:
+  bootstrap:
+    admin:
+      username: ${BOOTSTRAP_ADMIN_USERNAME:}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+      display-name: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:系统管理员}
+    agent:
+      username: ${BOOTSTRAP_AGENT_USERNAME:}
+      password: ${BOOTSTRAP_AGENT_PASSWORD:}
+      display-name: ${BOOTSTRAP_AGENT_DISPLAY_NAME:客服坐席}
   jwt:
     secret: ${JWT_SECRET:nexusmind-local-secret-change-me}
     ttl-seconds: ${JWT_TTL_SECONDS:86400}
   ai:
+    deepseek-api-key: ${DEEPSEEK_API_KEY:}
     dashscope-api-key: ${DASHSCOPE_API_KEY:}
-    default-model: ${QWEN_MODEL:qwen3.7-plus}
+    dashscope-base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+    default-model: ${DEEPSEEK_MODEL:deepseek-v4-flash}
     vision-model: ${QWEN_VISION_MODEL:qwen-vl-max}
     timeout-seconds: ${AI_TIMEOUT_SECONDS:60}
     max-tokens-limit: ${AI_MAX_TOKENS_LIMIT:600}

@@ -26,6 +26,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
+        "nexusmind.bootstrap.admin.username=test_admin",
+        "nexusmind.bootstrap.admin.password=test-admin-password",
+        "nexusmind.bootstrap.agent.username=test_agent",
+        "nexusmind.bootstrap.agent.password=test-agent-password",
         "nexusmind.ai.dashscope-api-key="
 })
 @AutoConfigureMockMvc

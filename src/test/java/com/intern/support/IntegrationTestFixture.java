@@ -46,13 +46,19 @@ public class IntegrationTestFixture {
                         values ('visitor', '{noop}visitor123', '演示访客', 'VISITOR', false, current_timestamp, current_timestamp, false)
                         """);
             }
+            if ("AGENT".equals(role)) {
+                jdbcTemplate.update("""
+                        insert into sys_users (username, password, display_name, role, online, created_at, updated_at, deleted)
+                        values ('agent', '{noop}agent123', '客服坐席', 'AGENT', true, current_timestamp, current_timestamp, false)
+                        """);
+            }
         }
     }
 
     public void seedDefaultModel() {
         jdbcTemplate.update("""
                 insert into ai_models (provider, model_name, temperature, max_tokens, enabled, created_at, updated_at, deleted)
-                values ('DASHSCOPE', 'qwen3.7-plus', 0.70, 1200, true, current_timestamp, current_timestamp, false)
+                values ('DEEPSEEK', 'deepseek-v4-flash', 0.70, 1200, true, current_timestamp, current_timestamp, false)
                 """);
     }
 
