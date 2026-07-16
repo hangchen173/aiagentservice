@@ -1,7 +1,7 @@
 <template>
   <div class="page app-page">
     <header class="topbar glass-bar">
-      <div class="brand">NexusMind <span>支持</span></div>
+      <div class="brand">NexusMind <span>Live Support</span></div>
       <div class="account-actions">
         <span>{{ auth.user?.displayName }}</span>
         <el-button text @click="logout">退出</el-button>
@@ -270,22 +270,23 @@ function logout() { auth.logout(); router.replace('/login') }
 </script>
 
 <style scoped>
-.customer-workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); width: min(1240px, 100%); min-height: calc(100vh - 64px); margin: 0 auto; background: #fff; border-inline: 1px solid #e5e5e7; }
-.conversation-sidebar { padding: 18px 14px; border-right: 1px solid #e5e5e7; background: #fafafa; }
+.customer-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); width: min(1320px, 100%); min-height: calc(100vh - 64px); margin: 0 auto; border-inline: 1px solid var(--line); background: rgba(20, 15, 18, .94); box-shadow: 0 0 80px rgba(0,0,0,.24); }
+.conversation-sidebar { padding: 18px 14px; border-right: 1px solid var(--line); background: linear-gradient(180deg, #1e161b, #151014); }
 .new-chat { width: 100%; }
-.sidebar-label { margin: 24px 8px 8px; color: #86868b; font-size: 12px; font-weight: 600; text-transform: uppercase; }
-.conversation-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 10px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
-.conversation-item:hover, .conversation-item.active { background: #e9e9ed; }
+.sidebar-label { margin: 24px 8px 8px; color: var(--gold); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.conversation-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; padding: 11px 10px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: #d8cecb; text-align: left; cursor: pointer; }
+.conversation-item:hover, .conversation-item.active { border-color: var(--line); background: #2a1d23; }
+.conversation-item.active { border-left-color: var(--crimson-bright); }
 .conversation-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.conversation-item small, .sidebar-empty { color: #86868b; }
+.conversation-item small, .sidebar-empty { color: var(--muted); }
 .sidebar-empty { padding: 18px 8px; font-size: 13px; }
 .conversation-panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; min-width: 0; height: calc(100vh - 64px); }
-.conversation-header { display: flex; align-items: center; justify-content: space-between; padding: 22px 28px; border-bottom: 1px solid #e5e5e7; }
-.conversation-header h1 { margin: 0; font-size: 20px; }.conversation-header p { margin: 5px 0 0; color: #86868b; font-size: 13px; }
-.conversation-messages { padding: 28px; }
-.empty-conversation { display: grid; place-content: center; min-height: 100%; text-align: center; color: #86868b; }.empty-conversation strong { color: #1d1d1f; font-size: 22px; }.empty-conversation span { margin-top: 8px; }
+.conversation-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 28px; border-bottom: 1px solid var(--line); background: rgba(29,21,26,.82); }
+.conversation-header h1 { margin: 0; font-family: Georgia, "Songti SC", serif; font-size: 21px; font-weight: 500; }.conversation-header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+.conversation-messages { padding: 28px; background: radial-gradient(circle at 50% 0, rgba(158,37,64,.08), transparent 38%); }
+.empty-conversation { display: grid; place-content: center; min-height: 100%; text-align: center; color: var(--muted); }.empty-conversation strong { color: var(--gold); font-family: Georgia, "Songti SC", serif; font-size: 23px; font-weight: 500; }.empty-conversation span { margin-top: 8px; }
 .customer-composer { padding: 16px 20px 20px; }.image-preview { margin: 0 20px; }
-.message-image { display: block; width: min(320px, 100%); max-height: 320px; margin: 8px 0; border-radius: 7px; object-fit: contain; }
-.image-preview { display: grid; grid-template-columns: 48px minmax(0,1fr) 32px; align-items: center; gap: 10px; padding: 10px; border: 1px solid #e5e5e7; border-radius: 7px; }.image-preview img { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; }
-@media (max-width: 760px) { .customer-workspace { grid-template-columns: 1fr; }.conversation-sidebar { display: flex; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid #e5e5e7; }.new-chat { width: auto; flex: 0 0 auto; }.sidebar-label,.sidebar-empty { display: none; }.conversation-item { width: 170px; flex: 0 0 auto; }.conversation-panel { height: calc(100vh - 130px); }.conversation-header,.conversation-messages { padding: 16px; }.customer-composer { padding: 12px; } }
+.message-image { display: block; width: min(320px, 100%); max-height: 320px; margin: 8px 0; border: 1px solid var(--line); border-radius: 5px; object-fit: contain; }
+.image-preview { display: grid; grid-template-columns: 48px minmax(0,1fr) 32px; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background:#21191e; }.image-preview img { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; }
+@media (max-width: 760px) { .customer-workspace { height: calc(100dvh - 64px); min-height: 0; grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; }.conversation-sidebar { display: flex; gap: 8px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }.new-chat { width: auto; flex: 0 0 auto; }.sidebar-label,.sidebar-empty { display: none; }.conversation-item { width: 170px; flex: 0 0 auto; }.conversation-panel { height: auto; min-height: 0; }.conversation-header,.conversation-messages { padding: 16px; }.customer-composer { padding: 12px; } }
 </style>

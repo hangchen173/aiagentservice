@@ -2,10 +2,10 @@
   <main class="auth-page">
     <section class="auth-shell">
       <div class="auth-brand">
-        <span class="brand-mark">N</span>
+        <span class="brand-mark"><i></i></span>
         <div>
           <strong>NexusMind</strong>
-          <small>客户支持中心</small>
+          <small>LIVE SUPPORT / 01</small>
         </div>
       </div>
 
@@ -15,7 +15,8 @@
       </div>
 
       <div class="auth-heading">
-        <h1>{{ mode === 'login' ? '欢迎回来' : '创建用户账号' }}</h1>
+        <span class="auth-kicker">BACKSTAGE ACCESS</span>
+        <h1>{{ mode === 'login' ? '欢迎回来' : '加入支持频道' }}</h1>
         <p>{{ mode === 'login' ? '登录后继续处理你的咨询。' : '注册后即可开始咨询并保留会话记录。' }}</p>
       </div>
 
@@ -78,19 +79,34 @@ async function submit() {
 </script>
 
 <style scoped>
-.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 32px 20px; background: #f5f5f7; }
-.auth-shell { width: min(420px, 100%); padding: 36px; border: 1px solid #dedee3; border-radius: 8px; background: rgba(255,255,255,.92); box-shadow: 0 16px 45px rgba(0,0,0,.07); }
-.auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
-.brand-mark { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 8px; background: #1d1d1f; color: #fff; font-weight: 700; }
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background:
+    linear-gradient(90deg, rgba(10, 5, 8, .96), rgba(18, 7, 12, .72) 48%, rgba(9, 5, 8, .9)),
+    linear-gradient(0deg, rgba(9, 5, 8, .45), rgba(9, 5, 8, .12)),
+    url('/assets/stage-red.jpg') center / cover fixed;
+}
+.auth-page::before { position: fixed; inset: 18px; border: 1px solid rgba(222, 187, 159, .2); pointer-events: none; content: ""; }
+.auth-shell { position: relative; width: min(430px, 100%); padding: 38px; border: 1px solid rgba(222, 187, 159, .28); border-radius: 6px; background: rgba(20, 13, 17, .9); box-shadow: 0 24px 80px rgba(0,0,0,.5); backdrop-filter: blur(16px); }
+.auth-shell::after { position: absolute; inset: 8px; border: 1px solid rgba(222, 187, 159, .08); pointer-events: none; content: ""; }
+.auth-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+.brand-mark { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid #d8b58c; transform: rotate(45deg); }
+.brand-mark i { width: 16px; height: 16px; border: 1px solid #d8b58c; background: #a92746; }
 .auth-brand strong, .auth-brand small { display: block; }
-.auth-brand strong { font-size: 17px; }
-.auth-brand small { margin-top: 3px; color: #6e6e73; }
-.segmented { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 7px; background: #ececf0; }
-.segmented button { height: 34px; border: 0; border-radius: 5px; background: transparent; color: #6e6e73; cursor: pointer; }
-.segmented button.active { background: #fff; color: #1d1d1f; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-.auth-heading { margin: 28px 0 22px; }
-.auth-heading h1 { margin: 0; font-size: 28px; font-weight: 650; }
-.auth-heading p { margin: 8px 0 0; color: #6e6e73; line-height: 1.55; }
+.auth-brand strong { font-family: Georgia, "Times New Roman", serif; font-size: 20px; font-weight: 500; }
+.auth-brand small { margin-top: 4px; color: #d8b58c; font-size: 10px; }
+.segmented { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border: 1px solid rgba(222,187,159,.14); border-radius: 5px; background: rgba(5,3,5,.42); }
+.segmented button { height: 34px; border: 0; border-radius: 3px; background: transparent; color: #a99b9e; cursor: pointer; }
+.segmented button.active { background: #8f213b; color: #fff; box-shadow: 0 5px 18px rgba(95, 9, 32, .35); }
+.auth-heading { position: relative; z-index: 1; margin: 28px 0 22px; }
+.auth-kicker { color: #d8b58c; font-size: 10px; font-weight: 700; }
+.auth-heading h1 { margin: 8px 0 0; font-family: Georgia, "Songti SC", serif; font-size: 30px; font-weight: 500; }
+.auth-heading p { margin: 8px 0 0; color: #a99b9e; line-height: 1.55; }
+.auth-shell :deep(.el-form) { position: relative; z-index: 1; }
+.auth-shell :deep(.el-form-item__label) { color: #cbbec0; }
 .submit-button { width: 100%; height: 42px; margin-top: 6px; }
-@media (max-width: 520px) { .auth-shell { padding: 26px 22px; } }
+@media (max-width: 520px) { .auth-page { padding: 24px 14px; }.auth-page::before { inset: 8px; }.auth-shell { padding: 28px 22px; } }
 </style>
