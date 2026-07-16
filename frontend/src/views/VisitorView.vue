@@ -26,9 +26,7 @@
         </div>
         <div class="composer">
           <input ref="imageInput" hidden type="file" accept="image/jpeg,image/png,image/gif" @change="selectImage" />
-          <el-tooltip content="上传图片" placement="top">
-            <el-button :icon="Picture" :disabled="sending" circle aria-label="上传图片" @click="imageInput?.click()" />
-          </el-tooltip>
+          <el-button :icon="Picture" :disabled="sending" aria-label="上传图片" @click="imageInput?.click()">上传图片</el-button>
           <el-input v-model="draft" :disabled="sending" :placeholder="selectedImage ? '可以补充图片相关问题' : '请输入你的问题'" @keyup.enter="send" />
           <el-button type="primary" :loading="sending" :disabled="!draft.trim() && !selectedImage" @click="send">发送</el-button>
           <el-button :loading="handoffSending" :disabled="sending || handoffSending" @click="handoff">转人工</el-button>
