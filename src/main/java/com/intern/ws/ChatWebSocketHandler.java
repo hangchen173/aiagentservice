@@ -8,6 +8,8 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.server.ResponseStatusException;
 
 @Component
 public class ChatWebSocketHandler extends TextWebSocketHandler {
@@ -34,7 +36,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
         if ("JOIN_SESSION".equals(wsMessage.getType())) {
-            chatService.requireAccessibleSession(wsMessage.getSessionId(), user);
+            try {
+                chatService.requireAccessibleSession(wsMessage.getSessionId(), user);
+            } catch (AccessDeniedException | ResponseStatusException ex) {
+                sendError(session, wsMessage.getSessionId(), "会话不存在或无权访问");
+                session.close(CloseStatus.POLICY_VIOLATION);
+                return;
+            }
             registry.join(wsMessage.getSessionId(), session);
             session.sendMessage(new TextMessage(objectMapper.writeValueAsString(
                     new WsMessage("SESSION_JOINED", wsMessage.getSessionId(), "已接入实时会话"))));

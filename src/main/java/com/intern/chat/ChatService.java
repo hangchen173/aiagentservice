@@ -74,6 +74,11 @@ public class ChatService {
                 .orderByDesc(ChatSession::getUpdatedAt);
         if (isVisitor(user)) {
             query.eq(ChatSession::getVisitorId, user.id());
+        } else if ("AGENT".equals(user.role())) {
+            query.and(scope -> scope
+                    .eq(ChatSession::getStatus, "PENDING_HANDOFF")
+                    .or()
+                    .eq(ChatSession::getAssignedAgentId, user.id()));
         }
         return chatSessionMapper.selectList(query);
     }
@@ -237,6 +242,14 @@ public class ChatService {
         ChatSession session = requireSession(sessionId);
         if (isVisitor(user) && !session.getVisitorId().equals(user.id())) {
             throw new AccessDeniedException("只能访问自己的会话");
+        }
+        if ("AGENT".equals(user.role())) {
+            boolean assignedToCurrentAgent = user.id().equals(session.getAssignedAgentId());
+            boolean waitingForAgent = "PENDING_HANDOFF".equals(session.getStatus())
+                    && session.getAssignedAgentId() == null;
+            if (!assignedToCurrentAgent && !waitingForAgent) {
+                throw new AccessDeniedException("只能访问待接入或分配给自己的会话");
+            }
         }
         return session;
     }

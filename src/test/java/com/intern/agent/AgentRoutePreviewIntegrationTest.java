@@ -30,6 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "nexusmind.bootstrap.admin.password=test-admin-password",
         "nexusmind.bootstrap.agent.username=test_agent",
         "nexusmind.bootstrap.agent.password=test-agent-password",
+        "nexusmind.ai.deepseek-api-key=",
         "nexusmind.ai.dashscope-api-key="
 })
 @AutoConfigureMockMvc

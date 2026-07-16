@@ -99,6 +99,9 @@ let longWaitTimer: number | undefined
 let localMessageId = 0
 let streamingAiMessage: ChatMessage | null = null
 let ignoredAiContent = ''
+let ignoredAiTimer: number | undefined
+let restReplyInFlight = false
+let socketReady: Promise<boolean> | null = null
 const objectUrls = new Set<string>()
 
 onMounted(loadSessions)
@@ -107,6 +110,7 @@ onBeforeUnmount(() => {
   socket?.close()
   window.clearTimeout(reconnectTimer)
   window.clearTimeout(longWaitTimer)
+  window.clearTimeout(ignoredAiTimer)
   objectUrls.forEach(URL.revokeObjectURL)
 })
 
@@ -149,10 +153,19 @@ function connect() {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
   const active = new WebSocket(`${scheme}://${location.host}/ws/chat?token=${encodeURIComponent(auth.token)}`)
   socket = active
-  active.onopen = () => active.send(JSON.stringify({ type: 'JOIN_SESSION', sessionId: session.value?.id }))
+  socketReady = new Promise(resolve => {
+    active.onopen = () => {
+      active.send(JSON.stringify({ type: 'JOIN_SESSION', sessionId: session.value?.id }))
+      resolve(true)
+    }
+    active.onerror = () => resolve(false)
+  })
   active.onmessage = (event) => handleSocket(JSON.parse(event.data))
   active.onclose = () => {
-    if (version === socketVersion && session.value) reconnectTimer = window.setTimeout(connect, 1500)
+    if (version !== socketVersion || !session.value) return
+    loadSessions().then(() => {
+      if (version === socketVersion && session.value) reconnectTimer = window.setTimeout(connect, 1500)
+    }).catch(() => undefined)
   }
 }
 
@@ -160,7 +173,7 @@ function handleSocket(payload: { type: string; content?: string }) {
   const content = payload.content || ''
   if (payload.type === 'AI_MESSAGE_DELTA') appendAiDelta(content)
   if (payload.type === 'AI_MESSAGE_DONE') { finishWaiting(); streamingAiMessage = null }
-  if (payload.type === 'AI_MESSAGE' && content !== ignoredAiContent) { finishWaiting(); addMessage({ senderType: 'AI', content }) }
+  if (payload.type === 'AI_MESSAGE' && !restReplyInFlight && content !== ignoredAiContent) { finishWaiting(); addMessage({ senderType: 'AI', content }) }
   if (payload.type === 'AGENT_MESSAGE') addMessage({ senderType: 'AGENT', content })
   if (['SYSTEM_NOTICE', 'TICKET_CREATED', 'AGENT_ACCEPTED', 'SESSION_CLOSED'].includes(payload.type)) {
     addMessage({ senderType: 'SYSTEM', content })
@@ -182,17 +195,20 @@ async function send() {
     const activeSession = await ensureSession()
     if (file) {
       const form = new FormData(); form.append('content', content); form.append('image', file)
+      restReplyInFlight = true
       const response = await api<ChatMessage>(http.post(`/chat/sessions/${activeSession.id}/messages/image`, form))
-      ignoredAiContent = response.content
+      suppressRealtimeReply(response.content)
       addMessage(response); finishWaiting()
-    } else if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'CHAT_MESSAGE', sessionId: activeSession.id, content }))
+    } else if (await waitForSocket()) {
+      socket?.send(JSON.stringify({ type: 'CHAT_MESSAGE', sessionId: activeSession.id, content }))
     } else {
+      restReplyInFlight = true
       const response = await api<ChatMessage>(http.post(`/chat/sessions/${activeSession.id}/messages`, { content }))
-      ignoredAiContent = response.content
+      suppressRealtimeReply(response.content)
       addMessage(response); finishWaiting()
     }
-  } catch (error) { finishWaiting(); ElMessage.error(messageOf(error, '发送失败')) }
+  } catch (error) { finishWaiting(); await reloadCurrentMessages(); ElMessage.error(messageOf(error, '发送失败')) }
+  finally { restReplyInFlight = false }
 }
 
 async function handoff() {
@@ -211,6 +227,25 @@ async function ensureSession() {
   const created = await api<ChatSession>(http.post('/chat/sessions', { title: '客户咨询' }))
   session.value = created; sessions.value.unshift(created); connect()
   return created
+}
+
+async function waitForSocket() {
+  if (socket?.readyState === WebSocket.OPEN) return true
+  if (!socketReady) return false
+  return Promise.race([socketReady, new Promise<boolean>(resolve => window.setTimeout(() => resolve(false), 1500))])
+}
+
+function suppressRealtimeReply(content: string) {
+  ignoredAiContent = content
+  window.clearTimeout(ignoredAiTimer)
+  ignoredAiTimer = window.setTimeout(() => { ignoredAiContent = '' }, 5000)
+}
+
+async function reloadCurrentMessages() {
+  if (!session.value) return
+  try {
+    messages.value = await hydrateImages(await api<ChatMessage[]>(http.get(`/chat/sessions/${session.value.id}/messages`)), session.value.id)
+  } catch { /* Keep the optimistic message when recovery is unavailable. */ }
 }
 
 function selectImage(event: Event) {
