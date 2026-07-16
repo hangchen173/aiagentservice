@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.intern.agent.AgentService;
 import com.intern.agent.AgentRouteDecision;
 import com.intern.aimodel.AiModelService;
+import com.intern.aimodel.ImageInput;
+import com.intern.common.BusinessException;
 import com.intern.mapper.ChatMessageMapper;
 import com.intern.mapper.ChatSessionMapper;
 import com.intern.model.entity.AiAgent;
@@ -22,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class ChatService {
@@ -31,6 +34,7 @@ public class ChatService {
     private final AiModelService aiModelService;
     private final TicketService ticketService;
     private final WsPublisher wsPublisher;
+    private final ImageStorageService imageStorageService;
 
     public ChatService(
             ChatSessionMapper chatSessionMapper,
@@ -38,13 +42,15 @@ public class ChatService {
             AgentService agentService,
             AiModelService aiModelService,
             TicketService ticketService,
-            WsPublisher wsPublisher) {
+            WsPublisher wsPublisher,
+            ImageStorageService imageStorageService) {
         this.chatSessionMapper = chatSessionMapper;
         this.chatMessageMapper = chatMessageMapper;
         this.agentService = agentService;
         this.aiModelService = aiModelService;
         this.ticketService = ticketService;
         this.wsPublisher = wsPublisher;
+        this.imageStorageService = imageStorageService;
     }
 
     public ChatSession createSession(CreateSessionRequest request) {
@@ -111,6 +117,43 @@ public class ChatService {
             wsPublisher.publish(sessionId, "TICKET_CREATED", notice);
         }
         return aiMessage.getId() == null ? userMessage : aiMessage;
+    }
+
+    public ChatMessage handleImageMessage(Long sessionId, String content, MultipartFile image) {
+        AuthUser user = SecurityContext.currentUser();
+        ChatSession session = requireOwnedVisitorSession(sessionId, user);
+        String question = content == null || content.isBlank() ? "请描述这张图片" : content.trim();
+        if (question.length() > 1000) {
+            throw new BusinessException("图片问题不能超过 1000 个字符");
+        }
+        StoredImage storedImage = imageStorageService.store(image);
+        ChatMessage userMessage = saveImageMessage(sessionId, session.getVisitorId(), question, storedImage);
+        wsPublisher.publish(sessionId, "CHAT_MESSAGE", "[图片] " + question);
+
+        AgentRouteDecision routeDecision = agentService.decideRoute(question);
+        AiAgent routedAgent = routeDecision.agent();
+        session.setCurrentAiAgentCode(routedAgent.getCode());
+        chatSessionMapper.updateById(session);
+        wsPublisher.publish(sessionId, "SYSTEM_NOTICE", routedAgent.getName() + " 已接入并分析图片");
+
+        ImageInput input = new ImageInput(storedImage.data(), storedImage.contentType(), storedImage.originalName());
+        String reply = aiModelService.completeWithImage(sessionId, routedAgent, question, input);
+        ChatMessage aiMessage = saveMessage(sessionId, "AI", null, reply);
+        wsPublisher.publish(sessionId, "AI_MESSAGE", reply);
+        return aiMessage.getId() == null ? userMessage : aiMessage;
+    }
+
+    public ImageDownload loadMessageImage(Long sessionId, Long messageId) {
+        requireAccessibleSession(sessionId, SecurityContext.currentUser());
+        ChatMessage message = chatMessageMapper.selectById(messageId);
+        if (message == null || !sessionId.equals(message.getSessionId()) || !"IMAGE".equals(message.getMessageType())
+                || message.getAttachmentKey() == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "图片不存在");
+        }
+        return new ImageDownload(
+                imageStorageService.read(message.getAttachmentKey()),
+                message.getAttachmentContentType(),
+                message.getAttachmentName());
     }
 
     public Flux<String> handleVisitorMessageStream(Long sessionId, String content, AuthUser user) {
@@ -206,6 +249,20 @@ public class ChatService {
         message.setSenderId(senderId);
         message.setContent(content);
         message.setMessageType("TEXT");
+        chatMessageMapper.insert(message);
+        return message;
+    }
+
+    private ChatMessage saveImageMessage(Long sessionId, Long senderId, String content, StoredImage image) {
+        ChatMessage message = new ChatMessage();
+        message.setSessionId(sessionId);
+        message.setSenderType("VISITOR");
+        message.setSenderId(senderId);
+        message.setContent(content);
+        message.setMessageType("IMAGE");
+        message.setAttachmentKey(image.key());
+        message.setAttachmentContentType(image.contentType());
+        message.setAttachmentName(image.originalName());
         chatMessageMapper.insert(message);
         return message;
     }

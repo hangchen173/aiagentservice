@@ -20,12 +20,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.mock.web.MockMultipartFile;
 
+import java.util.Base64;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -35,7 +38,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.driver-class-name=org.h2.Driver",
         "spring.datasource.username=sa",
         "spring.datasource.password=",
-        "nexusmind.ai.dashscope-api-key="
+        "nexusmind.ai.dashscope-api-key=",
+        "nexusmind.chat.image-storage-path=./target/test-chat-images"
 })
 @AutoConfigureMockMvc
 class ChatWorkflowIntegrationTest {
@@ -134,6 +138,51 @@ class ChatWorkflowIntegrationTest {
         List<ModelCallLog> logs = modelCallLogMapper.selectList(null);
         assertThat(logs).hasSize(1);
         assertThat(logs.get(0).getAgentCode()).isEqualTo("presales");
+    }
+
+    @Test
+    void visitorUploadsImageAndCanReadStoredAttachment() throws Exception {
+        String token = fixture.login("visitor", "visitor123");
+        long sessionId = fixture.createSession(token);
+        byte[] png = Base64.getDecoder().decode(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+        MockMultipartFile image = new MockMultipartFile("image", "sample.png", "image/png", png);
+
+        mockMvc.perform(multipart("/api/chat/sessions/{id}/messages/image", sessionId)
+                        .file(image)
+                        .param("content", "图片里有什么")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.senderType").value("AI"))
+                .andExpect(jsonPath("$.data.content").value(org.hamcrest.Matchers.containsString("未配置 DashScope API Key")));
+
+        List<ChatMessage> messages = chatMessageMapper.selectList(null);
+        assertThat(messages).hasSize(2);
+        ChatMessage imageMessage = messages.get(0);
+        assertThat(imageMessage.getMessageType()).isEqualTo("IMAGE");
+        assertThat(imageMessage.getAttachmentKey()).isNotBlank();
+        assertThat(imageMessage.getAttachmentName()).isEqualTo("sample.png");
+
+        mockMvc.perform(get("/api/chat/sessions/{sessionId}/messages/{messageId}/image", sessionId, imageMessage.getId())
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("image/png"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(png));
+    }
+
+    @Test
+    void imageUploadRejectsNonImageContent() throws Exception {
+        String token = fixture.login("visitor", "visitor123");
+        long sessionId = fixture.createSession(token);
+        MockMultipartFile image = new MockMultipartFile("image", "fake.png", "image/png", "not an image".getBytes());
+
+        mockMvc.perform(multipart("/api/chat/sessions/{id}/messages/image", sessionId)
+                        .file(image)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("上传的文件不是有效图片"));
     }
 
     @Test

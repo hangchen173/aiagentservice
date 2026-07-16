@@ -18,4 +18,8 @@ public class DemoAiChatGateway {
         }
         return "你好，我是 NexusMind 智能客服。已收到你的问题，我会结合当前场景给出建议；如果问题复杂，也可以为你转人工处理。";
     }
+
+    public String completeWithImage(AiModel model, String systemPrompt, String userMessage, ImageInput image) {
+        return "已收到图片“" + image.filename() + "”。当前未配置 DashScope API Key，因此演示模式无法识别图片内容；配置后即可使用视觉模型分析。";
+    }
 }

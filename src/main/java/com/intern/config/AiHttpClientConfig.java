@@ -14,7 +14,7 @@ public class AiHttpClientConfig {
     @Bean
     public RestClientCustomizer aiRestClientCustomizer(
             @Value("${nexusmind.ai.http.connect-timeout-seconds:5}") long connectTimeoutSeconds,
-            @Value("${nexusmind.ai.http.read-timeout-seconds:20}") long readTimeoutSeconds) {
+            @Value("${nexusmind.ai.http.read-timeout-seconds:90}") long readTimeoutSeconds) {
         return builder -> {
             HttpClient httpClient = HttpClient.newBuilder()
                     .connectTimeout(Duration.ofSeconds(connectTimeoutSeconds))

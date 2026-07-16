@@ -19,14 +19,18 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import reactor.core.publisher.Flux;
 
 @Service
 public class AiModelService {
+    private static final String TIMEOUT_FALLBACK = "AI 响应时间较长，本次请求已停止。请重新发送，或稍后再试。";
+    private static final String ERROR_FALLBACK = "AI 服务暂时异常，已记录本次问题。请稍后重试，或转人工客服继续处理。";
     private final AiModelMapper aiModelMapper;
     private final ModelCallLogMapper modelCallLogMapper;
     private final AiChatGateway aiChatGateway;
     private final String defaultModel;
+    private final String visionModel;
     private final Duration timeout;
     private final int maxTokensLimit;
     private final Executor aiModelExecutor;
@@ -37,13 +41,15 @@ public class AiModelService {
             AiChatGateway aiChatGateway,
             @Qualifier("aiModelExecutor") Executor aiModelExecutor,
             @Value("${nexusmind.ai.default-model}") String defaultModel,
-            @Value("${nexusmind.ai.timeout-seconds:20}") long timeoutSeconds,
+            @Value("${nexusmind.ai.vision-model:qwen-vl-max}") String visionModel,
+            @Value("${nexusmind.ai.timeout-seconds:60}") long timeoutSeconds,
             @Value("${nexusmind.ai.max-tokens-limit:600}") int maxTokensLimit) {
         this.aiModelMapper = aiModelMapper;
         this.modelCallLogMapper = modelCallLogMapper;
         this.aiChatGateway = aiChatGateway;
         this.aiModelExecutor = aiModelExecutor;
         this.defaultModel = defaultModel;
+        this.visionModel = visionModel;
         this.timeout = Duration.ofSeconds(timeoutSeconds);
         this.maxTokensLimit = maxTokensLimit;
     }
@@ -76,16 +82,44 @@ public class AiModelService {
         log.setPromptPreview(preview(prompt));
 
         try {
-            String response = CompletableFuture
-                    .supplyAsync(() -> aiChatGateway.complete(model, systemPrompt, userMessage), aiModelExecutor)
-                    .get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+            String response = await(() -> aiChatGateway.complete(model, systemPrompt, userMessage));
             log.setStatus("SUCCESS");
             log.setResponsePreview(preview(response));
             log.setLatencyMs(Duration.between(startedAt, Instant.now()).toMillis());
             modelCallLogMapper.insert(log);
             return response;
         } catch (Exception ex) {
-            String fallback = "我已记录你的问题，当前 AI 模型暂时不可用，建议转人工客服继续处理。";
+            String fallback = fallbackFor(ex);
+            log.setStatus("FAILED");
+            log.setResponsePreview(fallback);
+            log.setErrorMessage(preview(errorMessage(ex)));
+            log.setLatencyMs(Duration.between(startedAt, Instant.now()).toMillis());
+            modelCallLogMapper.insert(log);
+            return fallback;
+        }
+    }
+
+    public String completeWithImage(Long sessionId, AiAgent agent, String userMessage, ImageInput image) {
+        AiModel model = visionModel(activeModel());
+        String systemPrompt = compactPrompt(agent.getPrompt())
+                + "\n\n请分析用户上传的图片，只描述图片中能够确认的信息；看不清时明确说明，不要猜测。";
+        String prompt = systemPrompt + "\n\n用户问题：" + userMessage;
+        Instant startedAt = Instant.now();
+        ModelCallLog log = new ModelCallLog();
+        log.setSessionId(sessionId);
+        log.setModelName(model.getModelName());
+        log.setAgentCode(agent.getCode());
+        log.setPromptPreview(preview(prompt + " [图片：" + image.filename() + "]"));
+
+        try {
+            String response = await(() -> aiChatGateway.completeWithImage(model, systemPrompt, userMessage, image));
+            log.setStatus("SUCCESS");
+            log.setResponsePreview(preview(response));
+            log.setLatencyMs(Duration.between(startedAt, Instant.now()).toMillis());
+            modelCallLogMapper.insert(log);
+            return response;
+        } catch (Exception ex) {
+            String fallback = fallbackFor(ex);
             log.setStatus("FAILED");
             log.setResponsePreview(fallback);
             log.setErrorMessage(preview(errorMessage(ex)));
@@ -121,7 +155,7 @@ public class AiModelService {
                 })
                 .onErrorResume(ex -> {
                     if (logged.compareAndSet(false, true)) {
-                        String fallback = "我已记录你的问题，当前 AI 模型暂时不可用，建议转人工客服继续处理。";
+                        String fallback = fallbackFor(ex);
                         log.setStatus("FAILED");
                         log.setResponsePreview(fallback);
                         log.setErrorMessage(preview(errorMessage(ex)));
@@ -157,12 +191,22 @@ public class AiModelService {
         }
     }
 
+    private AiModel visionModel(AiModel source) {
+        AiModel model = new AiModel();
+        model.setProvider(source.getProvider());
+        model.setModelName(visionModel);
+        model.setTemperature(source.getTemperature());
+        model.setMaxTokens(source.getMaxTokens());
+        model.setEnabled(true);
+        return model;
+    }
+
     private String compactPrompt(String prompt) {
         return prompt + "\n\n请优先用 3 到 5 句话回答；需要转人工或创建工单时说明原因即可，避免输出虚构工单号。";
     }
 
     private String errorMessage(Throwable ex) {
-        if (ex instanceof TimeoutException) {
+        if (isTimeout(ex)) {
             return "AI 模型响应超时：" + timeout.toSeconds() + " 秒";
         }
         Throwable cause = ex.getCause();
@@ -170,6 +214,31 @@ public class AiModelService {
             return cause.getMessage();
         }
         return ex.getMessage();
+    }
+
+    private String fallbackFor(Throwable ex) {
+        return isTimeout(ex) ? TIMEOUT_FALLBACK : ERROR_FALLBACK;
+    }
+
+    private String await(Supplier<String> request) throws Exception {
+        CompletableFuture<String> future = CompletableFuture.supplyAsync(request, aiModelExecutor);
+        try {
+            return future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (TimeoutException ex) {
+            future.cancel(true);
+            throw ex;
+        }
+    }
+
+    private boolean isTimeout(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof TimeoutException) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
     }
 
     private String preview(String value) {

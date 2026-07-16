@@ -22,6 +22,10 @@ spring:
       chat:
         options:
           model: ${QWEN_MODEL:qwen3.7-plus}
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 9MB
   sql:
     init:
       mode: never
@@ -51,15 +55,19 @@ nexusmind:
   ai:
     dashscope-api-key: ${DASHSCOPE_API_KEY:}
     default-model: ${QWEN_MODEL:qwen3.7-plus}
-    timeout-seconds: ${AI_TIMEOUT_SECONDS:20}
+    vision-model: ${QWEN_VISION_MODEL:qwen-vl-max}
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:60}
     max-tokens-limit: ${AI_MAX_TOKENS_LIMIT:600}
     http:
       connect-timeout-seconds: ${AI_HTTP_CONNECT_TIMEOUT_SECONDS:5}
-      read-timeout-seconds: ${AI_HTTP_READ_TIMEOUT_SECONDS:20}
+      read-timeout-seconds: ${AI_HTTP_READ_TIMEOUT_SECONDS:90}
     executor:
       core-size: ${AI_EXECUTOR_CORE_SIZE:4}
       max-size: ${AI_EXECUTOR_MAX_SIZE:8}
       queue-capacity: ${AI_EXECUTOR_QUEUE_CAPACITY:40}
+  chat:
+    image-storage-path: ${CHAT_IMAGE_STORAGE_PATH:./data/chat-images}
+    image-max-bytes: ${CHAT_IMAGE_MAX_BYTES:8388608}
   rate-limit:
     window-seconds: ${RATE_LIMIT_WINDOW_SECONDS:60}
     max-requests: ${RATE_LIMIT_MAX_REQUESTS:120}

@@ -4,7 +4,9 @@ import com.intern.model.entity.AiModel;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.MimeTypeUtils;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
@@ -53,17 +55,34 @@ public class SpringAiChatGateway implements AiChatGateway {
     }
 
     @Override
+    public String completeWithImage(AiModel model, String systemPrompt, String userMessage, ImageInput image) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return demoAiChatGateway.completeWithImage(model, systemPrompt, userMessage, image);
+        }
+
+        ByteArrayResource imageResource = new ByteArrayResource(image.data()) {
+            @Override
+            public String getFilename() {
+                return image.filename();
+            }
+        };
+        return chatClient.prompt()
+                .system(BASE_SYSTEM_PROMPT + "\n\n" + systemPrompt)
+                .user(user -> user.text(userMessage)
+                        .media(MimeTypeUtils.parseMimeType(image.contentType()), imageResource))
+                .options(optionsFor(model))
+                .call()
+                .content();
+    }
+
+    @Override
     public Flux<String> stream(AiModel model, String systemPrompt, String userMessage) {
         if (apiKey == null || apiKey.isBlank()) {
             return Flux.fromIterable(splitForDemoStream(demoAiChatGateway.complete(model, systemPrompt, userMessage)))
                     .delayElements(streamChunkDelay);
         }
 
-        OpenAiChatOptions options = OpenAiChatOptions.builder()
-                .model(model.getModelName())
-                .temperature(model.getTemperature() == null ? null : model.getTemperature().doubleValue())
-                .maxTokens(model.getMaxTokens())
-                .build();
+        OpenAiChatOptions options = optionsFor(model);
 
         return chatClient.prompt()
                 .system(BASE_SYSTEM_PROMPT + "\n\n" + systemPrompt)
@@ -71,6 +90,14 @@ public class SpringAiChatGateway implements AiChatGateway {
                 .options(options)
                 .stream()
                 .content();
+    }
+
+    private OpenAiChatOptions optionsFor(AiModel model) {
+        return OpenAiChatOptions.builder()
+                .model(model.getModelName())
+                .temperature(model.getTemperature() == null ? null : model.getTemperature().doubleValue())
+                .maxTokens(model.getMaxTokens())
+                .build();
     }
 
     private List<String> splitForDemoStream(String response) {

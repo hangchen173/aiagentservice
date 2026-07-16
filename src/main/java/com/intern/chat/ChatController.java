@@ -10,7 +10,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 
@@ -41,6 +48,28 @@ public class ChatController {
     @PostMapping("/sessions/{id}/messages")
     public ApiResponse<ChatMessage> sendMessage(@PathVariable Long id, @Valid @RequestBody SendMessageRequest request) {
         return ApiResponse.ok(chatService.sendRestMessage(id, request));
+    }
+
+    @PostMapping(value = "/sessions/{id}/messages/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<ChatMessage> sendImage(
+            @PathVariable Long id,
+            @RequestParam(name = "content", required = false) String content,
+            @RequestParam("image") MultipartFile image) {
+        return ApiResponse.ok(chatService.handleImageMessage(id, content, image));
+    }
+
+    @GetMapping("/sessions/{sessionId}/messages/{messageId}/image")
+    public ResponseEntity<ByteArrayResource> getImage(
+            @PathVariable Long sessionId,
+            @PathVariable Long messageId) {
+        ImageDownload image = chatService.loadMessageImage(sessionId, messageId);
+        ByteArrayResource resource = new ByteArrayResource(image.data());
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(image.filename(), java.nio.charset.StandardCharsets.UTF_8)
+                        .build().toString())
+                .body(resource);
     }
 
     @PostMapping("/sessions/{id}/handoff")

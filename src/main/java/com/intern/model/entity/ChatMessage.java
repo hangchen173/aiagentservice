@@ -9,6 +9,9 @@ public class ChatMessage extends BaseEntity {
     private Long senderId;
     private String content;
     private String messageType;
+    private String attachmentKey;
+    private String attachmentContentType;
+    private String attachmentName;
 
     public Long getSessionId() {
         return sessionId;
@@ -48,5 +51,29 @@ public class ChatMessage extends BaseEntity {
 
     public void setMessageType(String messageType) {
         this.messageType = messageType;
+    }
+
+    public String getAttachmentKey() {
+        return attachmentKey;
+    }
+
+    public void setAttachmentKey(String attachmentKey) {
+        this.attachmentKey = attachmentKey;
+    }
+
+    public String getAttachmentContentType() {
+        return attachmentContentType;
+    }
+
+    public void setAttachmentContentType(String attachmentContentType) {
+        this.attachmentContentType = attachmentContentType;
+    }
+
+    public String getAttachmentName() {
+        return attachmentName;
+    }
+
+    public void setAttachmentName(String attachmentName) {
+        this.attachmentName = attachmentName;
     }
 }

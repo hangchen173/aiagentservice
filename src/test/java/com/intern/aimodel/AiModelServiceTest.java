@@ -31,7 +31,7 @@ class AiModelServiceTest {
         when(aiModelMapper.selectOne(any())).thenReturn(model);
         when(gateway.complete(eq(model), any(), eq("价格怎么收费"))).thenReturn("模型回复");
 
-        AiModelService service = new AiModelService(aiModelMapper, logMapper, gateway, Runnable::run, "qwen-default", 20, 600);
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 600);
         String response = service.complete(9L, agent, "价格怎么收费");
 
         assertThat(response).isEqualTo("模型回复");
@@ -55,10 +55,10 @@ class AiModelServiceTest {
         when(aiModelMapper.selectOne(any())).thenReturn(model);
         when(gateway.complete(any(), any(), any())).thenThrow(new RuntimeException("模型不可用"));
 
-        AiModelService service = new AiModelService(aiModelMapper, logMapper, gateway, Runnable::run, "qwen-default", 20, 600);
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 600);
         String response = service.complete(10L, agent(), "帮我转人工");
 
-        assertThat(response).isEqualTo("我已记录你的问题，当前 AI 模型暂时不可用，建议转人工客服继续处理。");
+        assertThat(response).isEqualTo("AI 服务暂时异常，已记录本次问题。请稍后重试，或转人工客服继续处理。");
         ModelCallLog log = capturedLog(logMapper);
         assertThat(log.getStatus()).isEqualTo("FAILED");
         assertThat(log.getResponsePreview()).isEqualTo(response);
@@ -75,7 +75,7 @@ class AiModelServiceTest {
         when(aiModelMapper.selectOne(any())).thenReturn(null);
         when(gateway.complete(any(), any(), eq("你好"))).thenReturn("默认模型回复");
 
-        AiModelService service = new AiModelService(aiModelMapper, logMapper, gateway, Runnable::run, "qwen-default", 20, 600);
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 600);
         String response = service.complete(11L, agent, "你好");
 
         assertThat(response).isEqualTo("默认模型回复");
@@ -97,7 +97,7 @@ class AiModelServiceTest {
         when(aiModelMapper.selectOne(any())).thenReturn(model);
         when(gateway.complete(any(), any(), any())).thenReturn("短回复");
 
-        AiModelService service = new AiModelService(aiModelMapper, logMapper, gateway, Runnable::run, "qwen-default", 20, 400);
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 400);
         service.complete(12L, agent(), "你好");
 
         ArgumentCaptor<AiModel> modelCaptor = ArgumentCaptor.forClass(AiModel.class);
@@ -115,7 +115,7 @@ class AiModelServiceTest {
         when(aiModelMapper.selectOne(any())).thenReturn(model);
         when(gateway.stream(any(), any(), eq("你好"))).thenReturn(Flux.just("第一段", "第二段"));
 
-        AiModelService service = new AiModelService(aiModelMapper, logMapper, gateway, Runnable::run, "qwen-default", 20, 600);
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 600);
         List<String> chunks = service.stream(13L, agent(), "你好").collectList().block();
 
         assertThat(chunks).containsExactly("第一段", "第二段");
@@ -134,19 +134,66 @@ class AiModelServiceTest {
         when(aiModelMapper.selectOne(any())).thenReturn(model);
         when(gateway.stream(any(), any(), any())).thenReturn(Flux.error(new RuntimeException("stream broken")));
 
-        AiModelService service = new AiModelService(aiModelMapper, logMapper, gateway, Runnable::run, "qwen-default", 20, 600);
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 600);
         List<String> chunks = service.stream(14L, agent(), "你好").collectList().block();
 
-        assertThat(chunks).containsExactly("我已记录你的问题，当前 AI 模型暂时不可用，建议转人工客服继续处理。");
+        assertThat(chunks).containsExactly("AI 服务暂时异常，已记录本次问题。请稍后重试，或转人工客服继续处理。");
         ModelCallLog log = capturedLog(logMapper);
         assertThat(log.getStatus()).isEqualTo("FAILED");
         assertThat(log.getErrorMessage()).isEqualTo("stream broken");
+    }
+
+    @Test
+    void streamTimeoutIsReportedAsTimeoutInsteadOfUnavailableModel() {
+        AiModelMapper aiModelMapper = mock(AiModelMapper.class);
+        ModelCallLogMapper logMapper = mock(ModelCallLogMapper.class);
+        AiChatGateway gateway = mock(AiChatGateway.class);
+        when(aiModelMapper.selectOne(any())).thenReturn(model("qwen-test"));
+        when(gateway.stream(any(), any(), any())).thenReturn(Flux.never());
+
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 0, 600);
+        List<String> chunks = service.stream(15L, agent(), "你好").collectList().block();
+
+        assertThat(chunks).containsExactly("AI 响应时间较长，本次请求已停止。请重新发送，或稍后再试。");
+        ModelCallLog log = capturedLog(logMapper);
+        assertThat(log.getStatus()).isEqualTo("FAILED");
+        assertThat(log.getErrorMessage()).contains("响应超时：0 秒");
+    }
+
+    @Test
+    void imageRequestUsesConfiguredVisionModel() {
+        AiModelMapper aiModelMapper = mock(AiModelMapper.class);
+        ModelCallLogMapper logMapper = mock(ModelCallLogMapper.class);
+        AiChatGateway gateway = mock(AiChatGateway.class);
+        when(aiModelMapper.selectOne(any())).thenReturn(model("qwen-text"));
+        when(gateway.completeWithImage(any(), any(), any(), any())).thenReturn("图片中是一张账单");
+
+        AiModelService service = service(aiModelMapper, logMapper, gateway, 20, 600);
+        String response = service.completeWithImage(
+                16L, agent(), "识别内容", new ImageInput(new byte[]{1}, "image/png", "bill.png"));
+
+        assertThat(response).isEqualTo("图片中是一张账单");
+        ArgumentCaptor<AiModel> modelCaptor = ArgumentCaptor.forClass(AiModel.class);
+        verify(gateway).completeWithImage(modelCaptor.capture(), any(), eq("识别内容"), any());
+        assertThat(modelCaptor.getValue().getModelName()).isEqualTo("qwen-vl-test");
+        assertThat(capturedLog(logMapper).getModelName()).isEqualTo("qwen-vl-test");
     }
 
     private ModelCallLog capturedLog(ModelCallLogMapper logMapper) {
         ArgumentCaptor<ModelCallLog> logCaptor = ArgumentCaptor.forClass(ModelCallLog.class);
         verify(logMapper).insert(logCaptor.capture());
         return logCaptor.getValue();
+    }
+
+    private AiModelService service(
+            AiModelMapper modelMapper,
+            ModelCallLogMapper logMapper,
+            AiChatGateway gateway,
+            long timeoutSeconds,
+            int maxTokens) {
+        return new AiModelService(
+                modelMapper, logMapper, gateway, Runnable::run,
+                "qwen-default", "qwen-vl-test", timeoutSeconds, maxTokens);
     }
 
     private AiModel model(String modelName) {
